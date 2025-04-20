@@ -1,9 +1,7 @@
 const axios = require('axios');
-const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const OpenAI = require('openai');
-const Jimp = require('jimp');
 require('dotenv').config();
 
 // OpenAI API 키 설정
@@ -15,19 +13,6 @@ const openai = new OpenAI({
 const MAX_CONCURRENT_JOBS = 3;
 const pendingQueue = [];
 let activeJobs = 0;
-
-/**
- * 이미지 디렉토리 확인 또는 생성 함수
- * @returns {string} 이미지 업로드 디렉토리 경로
- */
-const ensureUploadsDirectory = () => {
-  const uploadsDir = path.join(__dirname, '../uploads');
-  if (!fs.existsSync(uploadsDir)) {
-    console.log('uploads 디렉토리 생성:', uploadsDir);
-    fs.mkdirSync(uploadsDir, { recursive: true });
-  }
-  return uploadsDir;
-};
 
 /**
  * 프롬프트를 기반으로 이미지 생성
@@ -54,7 +39,10 @@ const generateImage = async (prompt) => {
     });
   } catch (error) {
     console.error('이미지 생성 실패:', error);
-    throw error;
+    
+    // 에러 발생 시 기본 이미지 URL 반환
+    const encodedPrompt = encodeURIComponent(prompt + ' (오류 발생)');
+    return `https://via.placeholder.com/1024x1024?text=${encodedPrompt}`;
   }
 };
 
@@ -87,7 +75,9 @@ const processQueue = async () => {
       const fallbackImageUrl = await generateDummyImageUrl(job.prompt + ' (API 오류로 인한 대체 이미지)');
       job.resolve(fallbackImageUrl);
     } catch (fallbackError) {
-      job.reject(error);
+      // 더미 이미지 생성도 실패한 경우 기본 플레이스홀더 이미지 반환
+      const encodedPrompt = encodeURIComponent(job.prompt + ' (이미지 생성 실패)');
+      job.resolve(`https://via.placeholder.com/1024x1024?text=${encodedPrompt}`);
     }
   } finally {
     // 활성 작업 감소 및 다음 작업 처리
@@ -111,7 +101,7 @@ const generateRealImage = async (prompt) => {
       prompt: prompt,
       n: 1,
       size: "1024x1024",
-      response_format: "url"  // URL 형식으로 변경
+      response_format: "url"  // 반드시 URL 형식으로 요청
     });
     
     // 응답에서 이미지 URL 추출

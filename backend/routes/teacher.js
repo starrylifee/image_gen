@@ -305,7 +305,27 @@ router.post('/process-prompt', authenticateTeacher, async (req, res) => {
         }
       } catch (error) {
         console.error('이미지 생성 오류:', error);
-        // 이미지 생성에 실패했더라도 프롬프트 승인 처리는 성공으로 응답
+        
+        // 이미지 생성에 실패한 경우에도 프롬프트 상태를 업데이트
+        try {
+          // 프롬프트 상태를 'processed'로 변경
+          prompt.status = 'processed';
+          await prompt.save();
+          
+          // 소켓을 통해 학생에게 오류 알림
+          if (req.io) {
+            req.io.emit('promptProcessed', {
+              promptId: prompt._id,
+              studentId: prompt.student,
+              status: 'processed',
+              message: '이미지 생성 중 오류가 발생했습니다'
+            });
+          }
+          
+          console.log(`프롬프트 ID: ${prompt._id}의 상태를 'processed'로 변경했습니다. (이미지 생성 실패)`);
+        } catch (updateError) {
+          console.error('프롬프트 상태 업데이트 오류:', updateError);
+        }
       }
     } else if (status === 'rejected') {
       // 거부된 경우 소켓을 통해 학생에게 알림

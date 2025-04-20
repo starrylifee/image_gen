@@ -146,6 +146,15 @@ export const setupSocketListeners = (socket, callbacks) => {
         status: 'approved'
       });
     });
+    
+    socket.on('promptProcessed', (data) => {
+      console.log('소켓: promptProcessed 이벤트 수신', data);
+      callbacks.onPromptStatusChange({
+        promptId: data.promptId,
+        status: 'processed',
+        message: data.message
+      });
+    });
   }
 
   // 이미지 상태 업데이트 이벤트
