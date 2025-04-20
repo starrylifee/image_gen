@@ -227,14 +227,21 @@ const downloadImage = (imageUrl, imageName) => {
   // 이미지 URL이 상대 경로인 경우 절대 경로로 변환
   const fullImageUrl = imageUrl.startsWith('http') 
     ? imageUrl 
-    : `http://localhost:5000${imageUrl}`;
+    : `${window.location.protocol}//${window.location.hostname}:5000${imageUrl}`;
+  
+  console.log('실제 요청 URL:', fullImageUrl);
   
   // 파일 이름 설정
   const fileName = imageName || `이미지_${new Date().getTime()}.png`;
   
   // fetch로 이미지 가져오기
   fetch(fullImageUrl)
-    .then(response => response.blob())
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`이미지 다운로드 실패: ${response.status} ${response.statusText}`);
+      }
+      return response.blob();
+    })
     .then(blob => {
       // 다운로드 링크 생성
       const url = window.URL.createObjectURL(blob);
@@ -252,7 +259,7 @@ const downloadImage = (imageUrl, imageName) => {
     })
     .catch(error => {
       console.error('이미지 다운로드 오류:', error);
-      alert('이미지 다운로드 중 오류가 발생했습니다.');
+      alert('이미지 다운로드 중 오류가 발생했습니다: ' + error.message);
     });
 };
 
@@ -516,7 +523,7 @@ const Student = () => {
                                     ? item.path // 외부 URL은 그대로 사용
                                     : (item.path || item.url).startsWith('http') 
                                       ? (item.path || item.url) 
-                                      : `${item.path || item.url}`} 
+                                      : `${window.location.protocol}//${window.location.hostname}:5000${item.path || item.url}`} 
                                   alt="승인된 이미지" 
                                   onError={(e) => {
                                     console.error('이미지 로드 실패:', e);
