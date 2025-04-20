@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const path = require('path');
+const bcrypt = require('bcryptjs');
 
 // 환경 변수 설정
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -31,6 +32,11 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/image-gen
       
       console.log('교사 ID 조회 성공:', teacher1._id, teacher2._id, teacher3._id);
       
+      // 비밀번호 해싱
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash('student123', salt);
+      console.log('학생 비밀번호 해싱 완료:', hashedPassword);
+      
       // 학생 계정 생성 함수
       const createStudents = async (teacherId, classroom, count) => {
         const students = [];
@@ -38,7 +44,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/image-gen
           const studentNumber = i.toString().padStart(2, '0');
           students.push({
             username: `${classroom}학생${studentNumber}`,
-            password: 'student123',
+            password: hashedPassword,
             name: `${classroom} 학생 ${studentNumber}호`,
             role: 'student',
             metadata: {

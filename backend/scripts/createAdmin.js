@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const path = require('path');
+const bcrypt = require('bcryptjs');
 
 // 환경 변수 설정
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -30,10 +31,15 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/image-gen
         console.log(`아이디: ${existingAdmin.username}`);
         console.log(`이름: ${existingAdmin.name}`);
       } else {
+        // 비밀번호 해싱
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash('admin123', salt);
+        console.log('관리자 비밀번호 해싱 완료:', hashedPassword);
+        
         // 새 관리자 계정 추가
         const admin = {
           username: 'admin',
-          password: 'admin123',
+          password: hashedPassword,
           name: '시스템 관리자',
           role: 'admin',
           createdAt: new Date()

@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const path = require('path');
+const bcrypt = require('bcryptjs');
 
 // 환경 변수 설정
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -25,11 +26,16 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/image-gen
       const deleteResult = await users.deleteMany({ role: 'teacher' });
       console.log('기존 교사 계정 삭제 완료:', deleteResult.deletedCount, '개 삭제됨');
       
-      // 교사 계정 추가 - 모든 교사에 평문 비밀번호 사용
+      // 비밀번호 해싱
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash('teacher123', salt);
+      console.log('교사 비밀번호 해싱 완료:', hashedPassword);
+      
+      // 교사 계정 추가 - 해시된 비밀번호 사용
       const teachers = [
         {
           username: 'teacher1',
-          password: 'teacher123',
+          password: hashedPassword,
           name: '김선생 (1반)',
           role: 'teacher',
           credits: 10, // 초기 크레딧 10
@@ -40,7 +46,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/image-gen
         },
         {
           username: 'teacher2',
-          password: 'teacher123',
+          password: hashedPassword,
           name: '이선생 (2반)',
           role: 'teacher',
           credits: 5, // 초기 크레딧 5
@@ -51,7 +57,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/image-gen
         },
         {
           username: 'teacher3',
-          password: 'teacher123',
+          password: hashedPassword,
           name: '박선생 (3반)',
           role: 'teacher',
           credits: 0, // 초기 크레딧 0
