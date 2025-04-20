@@ -114,12 +114,12 @@ function TeacherPage() {
     }
   };
 
-  const handlePromptAction = async (promptId, action, reason = '') => {
+  const handlePromptAction = async (promptId, status, rejectionReason = '') => {
     try {
       const token = localStorage.getItem('token');
       await axios.post(
         'http://localhost:5000/api/teacher/process-prompt',
-        { promptId, action, reason },
+        { promptId, status, rejectionReason },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       fetchPendingPrompts();
@@ -129,12 +129,12 @@ function TeacherPage() {
     }
   };
 
-  const handleImageAction = async (imageId, action, reason = '') => {
+  const handleImageAction = async (imageId, status, rejectionReason = '') => {
     try {
       const token = localStorage.getItem('token');
       await axios.post(
         'http://localhost:5000/api/teacher/process-image',
-        { imageId, action, reason },
+        { imageId, status, rejectionReason },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       fetchPendingImages();
@@ -160,13 +160,13 @@ function TeacherPage() {
               <ButtonGroup>
                 <Button
                   className="approve"
-                  onClick={() => handlePromptAction(prompt._id, 'approve')}
+                  onClick={() => handlePromptAction(prompt._id, 'approved')}
                 >
                   승인
                 </Button>
                 <Button
                   className="reject"
-                  onClick={() => handlePromptAction(prompt._id, 'reject', '부적절한 내용')}
+                  onClick={() => handlePromptAction(prompt._id, 'rejected', '부적절한 내용')}
                 >
                   거부
                 </Button>
@@ -190,16 +190,17 @@ function TeacherPage() {
                   className={`${image.safetyLevel}-border`}
                 />
               </ImageContainer>
+              <p>안전성 평가: {image.safetyLevel === 'safe' ? '안전' : image.safetyLevel === 'moderate' ? '주의' : '위험'}</p>
               <ButtonGroup>
                 <Button
                   className="approve"
-                  onClick={() => handleImageAction(image._id, 'approve')}
+                  onClick={() => handleImageAction(image._id, 'approved')}
                 >
                   승인
                 </Button>
                 <Button
                   className="reject"
-                  onClick={() => handleImageAction(image._id, 'reject', '부적절한 이미지')}
+                  onClick={() => handleImageAction(image._id, 'rejected', '부적절한 이미지')}
                 >
                   거부
                 </Button>
