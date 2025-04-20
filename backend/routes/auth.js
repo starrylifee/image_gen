@@ -29,18 +29,41 @@ router.post('/login', async (req, res) => {
     // 비밀번호 검증
     let isMatch = false;
     
-    try {
-      // bcrypt와 bcryptjs 모두 시도
-      if (password && user.password) {
+    // 해시된 비밀번호인지 확인 (bcrypt 해시는 $2a$, $2b$ 또는 $2y$로 시작)
+    const isHashed = user.password.startsWith('$2');
+    console.log('비밀번호 해싱 여부:', isHashed ? '해싱됨' : '해싱되지 않음');
+    
+    if (isHashed) {
+      try {
+        // bcryptjs로 비교
         console.log('bcryptjs로 비밀번호 비교 시도');
         isMatch = await bcryptjs.compare(password, user.password);
         console.log('bcryptjs 비교 결과:', isMatch);
+      } catch (compareError) {
+        console.error('비밀번호 비교 오류:', compareError);
       }
-    } catch (compareError) {
-      console.error('비밀번호 비교 오류:', compareError);
-      // 오류 발생시 직접 비교 시도 (해시되지 않은 경우 대비)
+    } else {
+      // 해싱되지 않은 경우 직접 비교
+      console.log('평문 비밀번호 직접 비교 시도');
       isMatch = (password === user.password);
       console.log('직접 비교 결과:', isMatch);
+      
+      // 로그인 성공 시 비밀번호 해싱 후 업데이트 (보안 강화)
+      if (isMatch) {
+        try {
+          console.log('비밀번호 해싱 및 저장 시도');
+          const salt = await bcryptjs.genSalt(10);
+          const hashedPassword = await bcryptjs.hash(password, salt);
+          
+          // 사용자 비밀번호 업데이트
+          user.password = hashedPassword;
+          await user.save();
+          console.log('사용자 비밀번호 해싱 업데이트 완료');
+        } catch (hashError) {
+          console.error('비밀번호 해싱 업데이트 오류:', hashError);
+          // 해싱 실패해도 로그인은 진행
+        }
+      }
     }
     
     console.log('최종 비밀번호 일치 여부:', isMatch);
