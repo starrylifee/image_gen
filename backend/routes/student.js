@@ -69,7 +69,7 @@ router.post('/submit-prompt', authenticateStudent, async (req, res) => {
     // 이미 처리 중인 프롬프트가 있는지 확인
     const pendingPrompt = await Prompt.findOne({
       student: req.user._id,
-      status: { $in: ['pending', 'approved'] }
+      status: 'pending'  // 대기 중인 프롬프트만 확인
     });
     
     if (pendingPrompt) {
@@ -132,7 +132,7 @@ router.get('/status', authenticateStudent, async (req, res) => {
     // 학생이 제출한 대기 중인 프롬프트 및 승인된 이미지 조회
     const pendingPrompts = await Prompt.find({
       student: studentId,
-      status: { $in: ['pending', 'approved'] }
+      status: 'pending'  // 대기 중인 프롬프트만 조회
     }).sort({ createdAt: -1 });
 
     // 승인된 이미지 조회
