@@ -542,7 +542,10 @@ const Student = () => {
                                   }}
                                 />
                                 <DownloadButton
-                                  onClick={() => downloadImage(item.path || item.url, `생성된_이미지_${formatDate(item.createdAt).replace(/[:\s]/g, '_')}.png`)}
+                                  onClick={() => {
+                                    const downloadUrl = item.path || item.url;
+                                    window.location.href = downloadUrl;
+                                  }}
                                 >
                                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                                     <path d="M8 12L3 7L4.4 5.55L7 8.15V1H9V8.15L11.6 5.55L13 7L8 12Z" fill="currentColor"/>
