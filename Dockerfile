@@ -20,8 +20,9 @@ RUN cd frontend && npm run build
 # 백엔드 서버 실행을 위한 환경 설정
 WORKDIR /app/backend
 
-# 필요한 디렉토리 생성
-RUN mkdir -p uploads
+# 필요한 디렉토리 생성 및 권한 설정
+RUN mkdir -p uploads && chmod 777 uploads
+RUN mkdir -p /tmp/uploads && chmod 777 /tmp/uploads
 
 # 환경 변수 설정 - 민감 정보는 자리 표시자 유지
 ENV NODE_ENV=production
@@ -31,6 +32,7 @@ ENV JWT_SECRET=ZfmrhX2qG7sP9t3vL8yK5jD4bE6nC1wA0uV2xR5tY7iO9pL3kM1zQ8wB4gF6hN0j
 ENV OPENAI_API_KEY=your_openai_api_key_here
 ENV CLIENT_URL=/
 ENV DEFAULT_TEACHER_CREDITS=5
+ENV UPLOADS_DIR=/tmp
 
 # 서버 실행
 EXPOSE 8080

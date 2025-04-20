@@ -22,6 +22,7 @@ let activeJobs = 0;
 const generateImage = async (prompt) => {
   try {
     console.log(`이미지 생성 요청: "${prompt}"`);
+    console.log(`환경 변수 UPLOADS_DIR: ${process.env.UPLOADS_DIR || '설정되지 않음'}`);
     
     return new Promise((resolve, reject) => {
       // 대기열에 작업 추가
