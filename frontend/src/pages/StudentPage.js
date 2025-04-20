@@ -127,24 +127,65 @@ function StudentPage() {
 
   // 승인된 이미지 목록 렌더링
   const renderApprovedImages = () => {
+    console.log('렌더링할 이미지 데이터:', status?.approvedImages);
+    
     if (!status || !status.approvedImages || status.approvedImages.length === 0) {
       return <p>승인된 이미지가 없습니다.</p>;
     }
 
-    return status.approvedImages.map((image) => (
-      <div key={image._id} style={{ marginBottom: '20px', padding: '10px', border: '1px solid #eee', borderRadius: '8px' }}>
-        <h3>승인된 이미지</h3>
-        <p>{image.prompt?.content || '프롬프트 정보 없음'}</p>
-        <ImageContainer>
-          {/* 외부 URL과 내부 경로 구분 처리 */}
-          <img
-            src={image.isExternalUrl ? image.displayUrl : `http://localhost:5000${image.path}`}
-            alt="생성된 이미지"
-            style={{ maxWidth: '100%', borderRadius: '4px' }}
-          />
-        </ImageContainer>
-      </div>
-    ));
+    return status.approvedImages.map((image) => {
+      // 디버깅용 로그 추가
+      console.log('이미지 항목 렌더링:', image);
+      console.log('이미지 경로 정보:', {
+        isExternalUrl: image.isExternalUrl,
+        path: image.path,
+        displayUrl: image.displayUrl
+      });
+      
+      // URL 정의 (안전하게 처리)
+      let imageUrl = '';
+      if (image.isExternalUrl && image.displayUrl) {
+        imageUrl = image.displayUrl;
+      } else if (image.path) {
+        imageUrl = image.path.startsWith('http') 
+          ? image.path 
+          : `http://localhost:5000${image.path.startsWith('/') ? image.path : `/${image.path}`}`;
+      }
+      
+      return (
+        <div key={image._id} style={{ 
+          marginBottom: '20px', 
+          padding: '15px', 
+          border: '1px solid #ddd', 
+          borderRadius: '8px',
+          backgroundColor: '#f9f9f9'
+        }}>
+          <h4 style={{ marginBottom: '10px' }}>이미지 (생성일: {new Date(image.createdAt).toLocaleString()})</h4>
+          <p><strong>프롬프트:</strong> {image.prompt?.content || '프롬프트 정보 없음'}</p>
+          <ImageContainer>
+            {imageUrl ? (
+              <img
+                src={imageUrl}
+                alt="생성된 이미지"
+                style={{ 
+                  maxWidth: '100%', 
+                  borderRadius: '4px',
+                  boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
+                }}
+                onError={(e) => {
+                  console.error('이미지 로딩 실패:', imageUrl);
+                  e.target.src = 'https://via.placeholder.com/400x400?text=이미지+로딩+실패';
+                }}
+              />
+            ) : (
+              <div style={{ padding: '50px', backgroundColor: '#eee', textAlign: 'center' }}>
+                이미지 경로가 유효하지 않습니다
+              </div>
+            )}
+          </ImageContainer>
+        </div>
+      );
+    });
   };
 
   return (
@@ -174,7 +215,7 @@ function StudentPage() {
         
         {/* 승인된 이미지 목록 */}
         <div>
-          <h3>승인된 이미지</h3>
+          <h3>승인된 이미지 ({status?.approvedImages?.length || 0}개)</h3>
           {renderApprovedImages()}
         </div>
       </StatusSection>
