@@ -21,26 +21,18 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // 비밀번호 확인 - 직접 비교 로직 추가
+    // 비밀번호 확인 - 해시 비교만 사용
     console.log('저장된 비밀번호:', user.password);
     
-    // 평문 비밀번호 비교 먼저 시도
+    // 비밀번호 검증 - 직접 비교 제거
     let isMatch = false;
     
-    // 1. 직접 평문 비교 (테스트 계정용)
-    if (user.password === password) {
-      console.log('평문 비밀번호 일치');
-      isMatch = true;
-    } 
-    // 2. bcrypt 해시 비교 시도
-    else {
-      try {
-        isMatch = await bcryptjs.compare(password, user.password);
-        console.log('해시 비밀번호 비교 결과:', isMatch);
-      } catch (compareError) {
-        console.error('비밀번호 비교 오류:', compareError);
-        // 오류 발생해도 계속 진행 (결과는 false)
-      }
+    try {
+      isMatch = await bcryptjs.compare(password, user.password);
+      console.log('해시 비밀번호 비교 결과:', isMatch);
+    } catch (compareError) {
+      console.error('비밀번호 비교 오류:', compareError);
+      // 오류 발생해도 계속 진행 (결과는 false)
     }
     
     console.log('최종 비밀번호 일치 여부:', isMatch);
