@@ -224,10 +224,19 @@ const formatDate = (dateString) => {
 const downloadImage = (imageUrl, imageName) => {
   console.log('이미지 다운로드 시도:', imageUrl);
   
-  // 이미지 URL이 상대 경로인 경우 절대 경로로 변환
-  const fullImageUrl = imageUrl.startsWith('http') 
-    ? imageUrl 
-    : `${window.location.protocol}//${window.location.hostname}:5000${imageUrl}`;
+  // 이미지 URL이 상대 경로인 경우 절대 경로로 변환 (포트 번호 제거하고 API 경로 사용)
+  let fullImageUrl;
+  
+  if (imageUrl.startsWith('http')) {
+    // 외부 URL인 경우 그대로 사용
+    fullImageUrl = imageUrl;
+  } else if (imageUrl.startsWith('/uploads')) {
+    // 이미 /uploads로 시작하는 경우 API URL로 처리
+    fullImageUrl = imageUrl;
+  } else {
+    // 상대 경로인 경우 uploads 경로 추가
+    fullImageUrl = `/uploads${imageUrl.startsWith('/') ? imageUrl : '/' + imageUrl}`;
+  }
   
   console.log('실제 요청 URL:', fullImageUrl);
   
@@ -523,7 +532,9 @@ const Student = () => {
                                     ? item.path // 외부 URL은 그대로 사용
                                     : (item.path || item.url).startsWith('http') 
                                       ? (item.path || item.url) 
-                                      : `${window.location.protocol}//${window.location.hostname}:5000${item.path || item.url}`} 
+                                      : (item.path || item.url).startsWith('/uploads')
+                                        ? (item.path || item.url)
+                                        : `/uploads${(item.path || item.url).startsWith('/') ? (item.path || item.url) : '/' + (item.path || item.url)}`} 
                                   alt="승인된 이미지" 
                                   onError={(e) => {
                                     console.error('이미지 로드 실패:', e);
