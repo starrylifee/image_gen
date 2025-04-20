@@ -59,8 +59,25 @@ function StudentPage() {
     const socket = io('http://localhost:5000');
     const user = JSON.parse(localStorage.getItem('user'));
 
+    // 프롬프트 상태 업데이트 이벤트
     socket.on('promptStatusUpdate', (data) => {
       if (data.studentId === user._id) {
+        checkStatus();
+      }
+    });
+    
+    // 이미지 승인 이벤트
+    socket.on('imageApproved', (data) => {
+      if (data.studentId === user._id) {
+        console.log('이미지가 승인되었습니다:', data);
+        checkStatus();
+      }
+    });
+    
+    // 이미지 생성 이벤트
+    socket.on('imageGenerated', (data) => {
+      if (data.student._id === user._id) {
+        console.log('새 이미지가 생성되었습니다:', data);
         checkStatus();
       }
     });
@@ -76,6 +93,7 @@ function StudentPage() {
       const response = await axios.get('http://localhost:5000/api/student/status', {
         headers: { Authorization: `Bearer ${token}` }
       });
+      console.log('학생 상태 데이터:', response.data);
       setStatus(response.data);
     } catch (error) {
       console.error('상태 확인 오류:', error);
@@ -100,6 +118,28 @@ function StudentPage() {
     }
   };
 
+  // 승인된 이미지 목록 렌더링
+  const renderApprovedImages = () => {
+    if (!status || !status.approvedImages || status.approvedImages.length === 0) {
+      return <p>승인된 이미지가 없습니다.</p>;
+    }
+
+    return status.approvedImages.map((image) => (
+      <div key={image._id}>
+        <h3>승인된 이미지</h3>
+        <p>{image.prompt?.content || '프롬프트 정보 없음'}</p>
+        <ImageContainer>
+          {/* 외부 URL과 내부 경로 구분 처리 */}
+          <img
+            src={image.isExternalUrl ? image.displayUrl : `http://localhost:5000${image.path}`}
+            alt="생성된 이미지"
+            className={`${image.safetyLevel || 'safe'}-border`}
+          />
+        </ImageContainer>
+      </div>
+    ));
+  };
+
   return (
     <PageContainer>
       <Title>프롬프트 제출</Title>
@@ -116,24 +156,16 @@ function StudentPage() {
 
       <StatusSection>
         <h2>현재 상태</h2>
-        {status?.pendingPrompt && (
+        {status?.pendingPrompts && status.pendingPrompts.length > 0 && (
           <div>
             <h3>대기 중인 프롬프트</h3>
-            <p>{status.pendingPrompt.content}</p>
+            <p>{status.pendingPrompts[0].content}</p>
+            <p style={{ color: 'gray' }}>상태: {status.pendingPrompts[0].status}</p>
           </div>
         )}
-        {status?.approvedImage && (
-          <div>
-            <h3>승인된 이미지</h3>
-            <ImageContainer>
-              <img
-                src={`${status.approvedImage.path}`}
-                alt="생성된 이미지"
-                className={`${status.approvedImage.safetyLevel}-border`}
-              />
-            </ImageContainer>
-          </div>
-        )}
+        
+        {/* 승인된 이미지 목록 */}
+        {renderApprovedImages()}
       </StatusSection>
     </PageContainer>
   );

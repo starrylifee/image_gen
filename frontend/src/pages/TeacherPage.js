@@ -185,7 +185,7 @@ function TeacherPage() {
               <p>프롬프트: {image.prompt.content}</p>
               <ImageContainer>
                 <img
-                  src={`http://localhost:5000/${image.path}`}
+                  src={image.isExternalUrl ? image.displayUrl : `http://localhost:5000${image.path}`}
                   alt="생성된 이미지"
                   className={`${image.safetyLevel}-border`}
                 />
