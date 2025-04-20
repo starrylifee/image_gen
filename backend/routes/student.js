@@ -150,20 +150,31 @@ router.get('/status', authenticateStudent, async (req, res) => {
     const formattedImages = approvedImages.map(img => {
       const imageObj = img.toObject();
       
-      // 외부 URL인 경우 그대로 사용, 아니면 /uploads/ 경로 추가
-      if (imageObj.path) {
-        if (imageObj.isExternalUrl) {
-          // 외부 URL인 경우 그대로 사용
-          imageObj.path = imageObj.path;
-        } else {
-          // 내부 파일인 경우 /uploads 경로 추가
-          imageObj.path = imageObj.path.startsWith('/') 
-            ? `/uploads${imageObj.path}` 
-            : `/uploads/${imageObj.path}`;
-        }
-      }
+      // URL 형식인지 확인 (http 또는 https로 시작하는지)
+      const isExternalUrl = imageObj.path && (
+        imageObj.path.startsWith('http://') || 
+        imageObj.path.startsWith('https://')
+      );
       
-      return imageObj;
+      if (isExternalUrl) {
+        // 외부 URL인 경우 그대로 사용
+        return {
+          ...imageObj,
+          isExternalUrl: true,
+          displayUrl: imageObj.path // 표시용 URL
+        };
+      } else {
+        // 내부 파일인 경우 /uploads 경로 추가
+        const imagePath = imageObj.path.startsWith('/') 
+          ? `/uploads${imageObj.path}` 
+          : `/uploads/${imageObj.path}`;
+        
+        return {
+          ...imageObj,
+          isExternalUrl: false,
+          path: imagePath
+        };
+      }
     });
 
     res.json({

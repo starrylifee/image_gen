@@ -153,24 +153,44 @@ router.get('/pending-images', authenticateTeacher, async (req, res) => {
       .populate('prompt', 'content')
       .sort({ createdAt: 1 });
     
-    // 이미지 경로 변환 - 슬래시가 맨 앞에 있는지 확인
+    // 이미지 경로 변환 - 외부 URL과 내부 경로 구분 처리
     const formattedImages = pendingImages.map(img => {
       const imageObj = img.toObject();
       
-      // 이미지 경로가 /uploads로 시작하지 않도록 수정
-      const imagePath = imageObj.path.startsWith('/') 
-        ? `/uploads${imageObj.path}` 
-        : `/uploads/${imageObj.path}`;
+      // URL 형식인지 확인 (http 또는 https로 시작하는지)
+      const isExternalUrl = imageObj.path && (
+        imageObj.path.startsWith('http://') || 
+        imageObj.path.startsWith('https://')
+      );
       
-      return {
-        ...imageObj,
-        path: imagePath,
-        originalPath: imageObj.path // 디버깅용으로 원본 경로도 포함
-      };
+      if (isExternalUrl) {
+        // 외부 URL인 경우 그대로 사용
+        return {
+          ...imageObj,
+          isExternalUrl: true,
+          displayUrl: imageObj.path // 표시용 URL
+        };
+      } else {
+        // 내부 파일인 경우 /uploads 경로 추가
+        const imagePath = imageObj.path.startsWith('/') 
+          ? `/uploads${imageObj.path}` 
+          : `/uploads/${imageObj.path}`;
+        
+        return {
+          ...imageObj,
+          isExternalUrl: false,
+          path: imagePath,
+          originalPath: imageObj.path // 디버깅용으로 원본 경로도 포함
+        };
+      }
     });
     
     console.log(`대기 중인 이미지 ${formattedImages.length}개 조회됨`);
-    console.log('첫 번째 이미지 경로:', formattedImages.length > 0 ? formattedImages[0].path : '없음');
+    if (formattedImages.length > 0) {
+      console.log('첫 번째 이미지 경로:', formattedImages[0].isExternalUrl ? 
+        '외부 URL: ' + formattedImages[0].displayUrl.substring(0, 50) + '...' : 
+        formattedImages[0].path);
+    }
     
     // 일관된 응답 형식 유지 - 객체 형태로 반환
     res.json({
