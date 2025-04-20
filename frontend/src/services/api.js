@@ -106,7 +106,22 @@ export const teacherAPI = {
       });
       return response.data;
     } catch (error) {
-      throw error.response?.data || { message: '프롬프트 처리 중 오류가 발생했습니다.' };
+      // 오류 응답 데이터 확인 및 명확한 오류 메시지 전달
+      if (error.response?.data) {
+        const errorData = error.response.data;
+        
+        // 크레딧 부족 오류 메시지 명확히 처리
+        if (errorData.message && errorData.message.includes('크레딧이 부족')) {
+          throw {
+            ...errorData,
+            message: `크레딧이 부족하여 이미지를 생성할 수 없습니다. (보유: ${errorData.credits || 0}, 필요: ${errorData.neededCredits || 1})`
+          };
+        }
+        
+        throw errorData;
+      }
+      
+      throw { message: '프롬프트 처리 중 오류가 발생했습니다.' };
     }
   },
 

@@ -334,19 +334,51 @@ const Student = () => {
           });
           // 상태 새로고침
           fetchStatus();
+        } else if (data.promptId && data.status === 'approved') {
+          setNotification({
+            show: true,
+            message: '프롬프트가 승인되었습니다. 곧 이미지가 생성됩니다.',
+            type: 'success'
+          });
+        } else if (data.promptId && data.status === 'processed') {
+          setNotification({
+            show: true,
+            message: data.message || '프롬프트 처리가 완료되었습니다.',
+            type: 'info'
+          });
+          // 상태 새로고침
+          fetchStatus();
         }
       },
       onImageStatusChange: (data) => {
         console.log('이미지 상태 변경 이벤트:', data);
         if (data.imageId) {
           if (data.status === 'approved') {
+            // 이미지가 승인되면 즉시 승인된 이미지 목록에 추가
+            const newImage = {
+              _id: data.imageId,
+              path: data.imageUrl,
+              isExternalUrl: data.imageUrl.startsWith('http'),
+              createdAt: new Date().toISOString()
+            };
+            
+            setApprovedImages(prev => [newImage, ...prev]);
+            
+            // 승인된, 처리 중인 프롬프트를 목록에서 제거
+            setPendingPrompts(prev => prev.filter(prompt => 
+              !(prompt.status === 'approved' || prompt.status === 'processed')
+            ));
+            
             setNotification({
               show: true,
-              message: '이미지가 생성되었습니다!',
+              message: '이미지가 승인되었습니다!',
               type: 'success'
             });
-            // 상태 새로고침
-            fetchStatus();
+            
+            // 알림을 5초 후에 자동으로 닫기
+            setTimeout(() => {
+              setNotification(prev => ({ ...prev, show: false }));
+            }, 5000);
           } else if (data.status === 'rejected') {
             setNotification({
               show: true,

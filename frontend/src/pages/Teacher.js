@@ -218,6 +218,28 @@ const LoadingMessage = styled.div`
   color: #666;
 `;
 
+// 알림 컴포넌트 스타일
+const AlertMessage = styled.div`
+  padding: 10px 15px;
+  margin-bottom: 15px;
+  border-radius: 5px;
+  font-weight: 500;
+  background-color: ${props => props.type === 'error' ? '#f8d7da' : '#d4edda'};
+  color: ${props => props.type === 'error' ? '#721c24' : '#155724'};
+  border: 1px solid ${props => props.type === 'error' ? '#f5c6cb' : '#c3e6cb'};
+  ${props => props.success && `
+    background-color: #e8f5e9;
+    border-left: 4px solid #4caf50;
+    color: #2e7d32;
+  `}
+  
+  ${props => props.error && `
+    background-color: #ffebee;
+    border-left: 4px solid #f44336;
+    color: #c62828;
+  `}
+`;
+
 // 날짜 포맷 유틸리티 함수 추가
 const formatDate = (dateString) => {
   if (!dateString) return '날짜 정보 없음';
@@ -237,6 +259,8 @@ const Teacher = () => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [rejectionReasons, setRejectionReasons] = useState({});
+  // 알림 상태 추가
+  const [notification, setNotification] = useState({ show: false, message: '', type: 'info' });
 
   // 학생 계정 생성 관련 상태
   const [newStudents, setNewStudents] = useState([{ studentId: '', studentName: '' }]);
@@ -351,8 +375,37 @@ const Teacher = () => {
       const newReasons = { ...rejectionReasons };
       delete newReasons[promptId];
       setRejectionReasons(newReasons);
+      
+      // 성공 알림 표시
+      setNotification({
+        show: true,
+        message: status === 'approved' ? '프롬프트가 성공적으로 승인되었습니다.' : '프롬프트가 거부되었습니다.',
+        type: 'success'
+      });
+      
+      // 5초 후 알림 숨기기
+      setTimeout(() => setNotification({ show: false, message: '', type: 'info' }), 5000);
     } catch (err) {
       console.error('프롬프트 처리 중 오류 발생:', err);
+      
+      // 오류 메시지 처리 - 크레딧 부족 오류 특별 처리
+      let errorMessage = '프롬프트 처리 중 오류가 발생했습니다.';
+      
+      if (err.message && err.message.includes('크레딧이 부족')) {
+        errorMessage = '크레딧이 부족하여 이미지를 생성할 수 없습니다. 관리자에게 크레딧 충전을 요청하세요.';
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      // 오류 알림 표시
+      setNotification({
+        show: true,
+        message: errorMessage,
+        type: 'error'
+      });
+      
+      // 10초 후 알림 숨기기
+      setTimeout(() => setNotification({ show: false, message: '', type: 'info' }), 10000);
     } finally {
       setProcessing(false);
     }
@@ -375,8 +428,35 @@ const Teacher = () => {
       const newReasons = { ...rejectionReasons };
       delete newReasons[imageId];
       setRejectionReasons(newReasons);
+      
+      // 성공 알림 표시
+      setNotification({
+        show: true,
+        message: status === 'approved' ? '이미지가 성공적으로 승인되었습니다.' : '이미지가 거부되었습니다.',
+        type: 'success'
+      });
+      
+      // 5초 후 알림 숨기기
+      setTimeout(() => setNotification({ show: false, message: '', type: 'info' }), 5000);
     } catch (err) {
       console.error('이미지 처리 중 오류 발생:', err);
+      
+      // 오류 메시지 처리
+      let errorMessage = '이미지 처리 중 오류가 발생했습니다.';
+      
+      if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      // 오류 알림 표시
+      setNotification({
+        show: true,
+        message: errorMessage,
+        type: 'error'
+      });
+      
+      // 10초 후 알림 숨기기
+      setTimeout(() => setNotification({ show: false, message: '', type: 'info' }), 10000);
     } finally {
       setProcessing(false);
     }
@@ -662,24 +742,21 @@ const Teacher = () => {
                 
                 <ImageContainer>
                   {image.path ? (
-                    <>
-                      <p>이미지 경로: {image.path}</p>
-                      <Image 
-                        src={image.isExternalUrl 
-                          ? image.path // 외부 URL은 그대로 사용
-                          : image.path.startsWith('http') 
-                            ? image.path 
-                            : `http://localhost:5000${image.path}`} 
-                        alt="생성된 이미지" 
-                        onError={(e) => {
-                          console.error('이미지 로드 실패:', e);
-                          e.target.src = 'https://via.placeholder.com/400x300?text=이미지+로드+실패';
-                        }}
-                        onLoad={() => console.log('이미지 로드 성공:', image.path)}
-                      />
-                    </>
+                    <Image 
+                      src={image.isExternalUrl 
+                        ? image.path // 외부 URL은 그대로 사용
+                        : image.path.startsWith('http') 
+                          ? image.path 
+                          : `http://localhost:5000${image.path}`} 
+                      alt="생성된 이미지" 
+                      onError={(e) => {
+                        console.error('이미지 로드 실패:', e);
+                        e.target.src = 'https://via.placeholder.com/400x300?text=이미지+로드+실패';
+                      }}
+                      onLoad={() => console.log('이미지 로드 성공:', image.path)}
+                    />
                   ) : (
-                    <p>이미지 경로가 없습니다</p>
+                    <p>이미지를 불러올 수 없습니다</p>
                   )}
                 </ImageContainer>
                 
@@ -883,6 +960,13 @@ const Teacher = () => {
         <SubTitle>학생들의 프롬프트와 생성된 이미지를 검토하세요.</SubTitle>
       </Header>
       
+      {/* 알림 메시지 표시 */}
+      {notification.show && (
+        <AlertMessage type={notification.type}>
+          {notification.message}
+        </AlertMessage>
+      )}
+      
       <TabsContainer>
         <Tab 
           active={activeTab === 'prompts'} 
@@ -1005,24 +1089,6 @@ const SubmitButton = styled.button`
     background-color: #cccccc;
     cursor: not-allowed;
   }
-`;
-
-const AlertMessage = styled.div`
-  padding: 12px 20px;
-  border-radius: 4px;
-  margin-bottom: 15px;
-  
-  ${props => props.success && `
-    background-color: #e8f5e9;
-    border-left: 4px solid #4caf50;
-    color: #2e7d32;
-  `}
-  
-  ${props => props.error && `
-    background-color: #ffebee;
-    border-left: 4px solid #f44336;
-    color: #c62828;
-  `}
 `;
 
 // 스타일 컴포넌트 부분에 SectionTitle 추가
