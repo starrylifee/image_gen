@@ -16,10 +16,13 @@ const accountsToReset = [
   { username: '1반학생06', password: 'student123' }
 ];
 
+// MongoDB Atlas 연결 문자열 사용
+const MONGODB_URI = 'mongodb+srv://starrylife:wkatlffh62@cluster0.xp8dj.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+
 // MongoDB 연결 및 비밀번호 재설정
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/image-generation-approval')
+mongoose.connect(MONGODB_URI)
   .then(async () => {
-    console.log('MongoDB 연결 성공');
+    console.log('MongoDB Atlas 연결 성공');
     
     try {
       // 컬렉션 직접 접근
