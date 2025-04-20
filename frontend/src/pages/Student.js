@@ -286,29 +286,31 @@ const Student = () => {
           createdAt: new Date().toISOString()
         }]);
       } else if (data.pendingPrompts && data.pendingPrompts.length > 0) {
-        setPendingPrompts(data.pendingPrompts);
+        // 진행 중인 프롬프트만 pendingPrompts에 설정
+        const onlyPendingPrompts = data.pendingPrompts.filter(
+          prompt => prompt.status === 'pending'
+        );
+        setPendingPrompts(onlyPendingPrompts);
       } else {
         setPendingPrompts([]);
       }
       
       // 승인된 이미지 처리
-      if (data.approvedImage) {
+      if (data.approvedImages && data.approvedImages.length > 0) {
+        console.log('승인된 이미지 배열:', data.approvedImages);
+        setApprovedImages(data.approvedImages);
+      } else if (data.approvedImage) {
         console.log('승인된 이미지 있음:', data.approvedImage);
-        if (data.approvedImages && data.approvedImages.length > 0) {
-          console.log('승인된 이미지 배열:', data.approvedImages);
-          setApprovedImages(data.approvedImages);
-        } else {
-          setApprovedImages([{
-            path: data.approvedImage,
-            url: data.approvedImage,
-            createdAt: new Date().toISOString()
-          }]);
-        }
+        setApprovedImages([{
+          path: data.approvedImage,
+          url: data.approvedImage,
+          createdAt: new Date().toISOString()
+        }]);
       } else {
         setApprovedImages([]);
       }
 
-      console.log('설정된 승인 이미지:', data.approvedImage);
+      console.log('설정된 승인 이미지:', approvedImages);
     } catch (err) {
       setError('상태 정보를 불러오는 데 실패했습니다.');
       console.error('상태 조회 오류:', err);
@@ -364,10 +366,18 @@ const Student = () => {
             
             setApprovedImages(prev => [newImage, ...prev]);
             
-            // 승인된, 처리 중인 프롬프트를 목록에서 제거
-            setPendingPrompts(prev => prev.filter(prompt => 
-              !(prompt.status === 'approved' || prompt.status === 'processed')
-            ));
+            // 프롬프트 상태 정리 - 승인된 이미지에 해당되는 프롬프트를 목록에서 제거
+            setPendingPrompts(prev => {
+              const remainingPrompts = prev.filter(prompt => {
+                // 프롬프트 ID가 있으면 ID로 필터링, 없으면 상태로 필터링
+                if (prompt._id && data.promptId) {
+                  return prompt._id !== data.promptId;
+                } else {
+                  return prompt.status !== 'approved' && prompt.status !== 'processed';
+                }
+              });
+              return remainingPrompts;
+            });
             
             setNotification({
               show: true,
@@ -454,8 +464,8 @@ const Student = () => {
             {successMessage && (
               <StatusContent style={{ color: '#2ecc71' }}>{successMessage}</StatusContent>
             )}
-            <Button type="submit" disabled={submitting || loading || pendingPrompts.length > 0}>
-              {submitting ? '제출 중...' : pendingPrompts.length > 0 ? '처리 중인 프롬프트가 있습니다' : '프롬프트 제출'}
+            <Button type="submit" disabled={submitting || loading || pendingPrompts.some(p => p.status === 'pending')}>
+              {submitting ? '제출 중...' : pendingPrompts.some(p => p.status === 'pending') ? '처리 중인 프롬프트가 있습니다' : '프롬프트 제출'}
             </Button>
           </Form>
         </Section>
