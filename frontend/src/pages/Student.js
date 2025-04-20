@@ -185,8 +185,7 @@ const ApprovedImage = styled.img`
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 `;
 
-// 다운로드 버튼 스타일 컴포넌트 추가
-const DownloadButton = styled.button`
+const DownloadLink = styled.a`
   margin-top: 10px;
   padding: 8px 12px;
   background-color: #4caf50;
@@ -195,20 +194,14 @@ const DownloadButton = styled.button`
   border-radius: 4px;
   cursor: pointer;
   font-weight: 500;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  
-  &:hover {
-    background-color: #45a049;
-  }
-  
-  svg {
-    margin-right: 6px;
-  }
+  text-decoration: none;
+  &:hover { background-color: #45a049; }
+  svg { margin-right: 6px; }
 `;
 
-// 날짜 포맷 유틸리티 함수 추가
 const formatDate = (dateString) => {
   if (!dateString) return '날짜 정보 없음';
   
@@ -220,30 +213,23 @@ const formatDate = (dateString) => {
   }
 };
 
-// 이미지 다운로드 함수
 const downloadImage = (imageUrl, imageName) => {
   console.log('이미지 다운로드 시도:', imageUrl);
   
-  // 이미지 URL이 상대 경로인 경우 절대 경로로 변환 (포트 번호 제거하고 API 경로 사용)
   let fullImageUrl;
   
   if (imageUrl.startsWith('http')) {
-    // 외부 URL인 경우 그대로 사용
     fullImageUrl = imageUrl;
   } else if (imageUrl.startsWith('/uploads')) {
-    // 이미 /uploads로 시작하는 경우 API URL로 처리
     fullImageUrl = imageUrl;
   } else {
-    // 상대 경로인 경우 uploads 경로 추가
     fullImageUrl = `/uploads${imageUrl.startsWith('/') ? imageUrl : '/' + imageUrl}`;
   }
   
   console.log('실제 요청 URL:', fullImageUrl);
   
-  // 파일 이름 설정
   const fileName = imageName || `이미지_${new Date().getTime()}.png`;
   
-  // fetch로 이미지 가져오기
   fetch(fullImageUrl)
     .then(response => {
       if (!response.ok) {
@@ -252,17 +238,14 @@ const downloadImage = (imageUrl, imageName) => {
       return response.blob();
     })
     .then(blob => {
-      // 다운로드 링크 생성
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = fileName;
       
-      // 링크 클릭하여 다운로드 시작
       document.body.appendChild(link);
       link.click();
       
-      // 링크 제거
       window.URL.revokeObjectURL(url);
       document.body.removeChild(link);
     })
@@ -286,14 +269,12 @@ const Student = () => {
     type: 'info'
   });
 
-  // 학생 상태 조회
   const fetchStatus = async () => {
     setLoading(true);
     try {
       const data = await studentAPI.getStatus();
       console.log('상태 응답 데이터:', data);
       
-      // 서버에서 반환된 데이터로 상태 업데이트
       if (data.pendingPrompt) {
         setPendingPrompts([{
           content: data.pendingPrompt,
@@ -302,7 +283,6 @@ const Student = () => {
           createdAt: new Date().toISOString()
         }]);
       } else if (data.pendingPrompts && data.pendingPrompts.length > 0) {
-        // 진행 중인 프롬프트만 pendingPrompts에 설정
         const onlyPendingPrompts = data.pendingPrompts.filter(
           prompt => prompt.status === 'pending'
         );
@@ -311,7 +291,6 @@ const Student = () => {
         setPendingPrompts([]);
       }
       
-      // 승인된 이미지 처리
       if (data.approvedImages && data.approvedImages.length > 0) {
         console.log('승인된 이미지 배열:', data.approvedImages);
         setApprovedImages(data.approvedImages);
@@ -336,7 +315,6 @@ const Student = () => {
   };
 
   useEffect(() => {
-    // 소켓 연결 및 이벤트 리스너 설정
     const socket = socketService.connect();
     
     console.log('학생 화면: 소켓 연결 설정 완료');
@@ -350,7 +328,6 @@ const Student = () => {
             message: `프롬프트가 거부되었습니다: ${data.rejectionReason || '이유가 제공되지 않았습니다'}`,
             type: 'error'
           });
-          // 상태 새로고침
           fetchStatus();
         } else if (data.promptId && data.status === 'approved') {
           setNotification({
@@ -364,7 +341,6 @@ const Student = () => {
             message: data.message || '프롬프트 처리가 완료되었습니다.',
             type: 'info'
           });
-          // 상태 새로고침
           fetchStatus();
         }
       },
@@ -372,7 +348,6 @@ const Student = () => {
         console.log('이미지 상태 변경 이벤트:', data);
         if (data.imageId) {
           if (data.status === 'approved') {
-            // 이미지가 승인되면 즉시 승인된 이미지 목록에 추가
             const newImage = {
               _id: data.imageId,
               path: data.imageUrl,
@@ -382,10 +357,8 @@ const Student = () => {
             
             setApprovedImages(prev => [newImage, ...prev]);
             
-            // 프롬프트 상태 정리 - 승인된 이미지에 해당되는 프롬프트를 목록에서 제거
             setPendingPrompts(prev => {
               const remainingPrompts = prev.filter(prompt => {
-                // 프롬프트 ID가 있으면 ID로 필터링, 없으면 상태로 필터링
                 if (prompt._id && data.promptId) {
                   return prompt._id !== data.promptId;
                 } else {
@@ -401,7 +374,6 @@ const Student = () => {
               type: 'success'
             });
             
-            // 알림을 5초 후에 자동으로 닫기
             setTimeout(() => {
               setNotification(prev => ({ ...prev, show: false }));
             }, 5000);
@@ -411,23 +383,20 @@ const Student = () => {
               message: `이미지가 거부되었습니다: ${data.rejectionReason || '이유가 제공되지 않았습니다'}`,
               type: 'error'
             });
-            // 상태 새로고침
             fetchStatus();
           }
         }
       }
     });
     
-    // 초기 데이터 로드
     fetchStatus();
     
     return () => {
       cleanup && cleanup();
       socketService.disconnect();
     };
-  }, []); // 의존성 목록 비움 (컴포넌트 마운트 시 한 번만 실행)
+  }, []);
 
-  // 프롬프트 제출
   const handleSubmitPrompt = async (e) => {
     e.preventDefault();
     if (!prompt.trim()) return;
@@ -448,22 +417,16 @@ const Student = () => {
     }
   };
 
-  // 상태 배지 텍스트 변환
   const getStatusText = (status) => {
-    switch(status) {
-      case 'pending': return '대기 중';
-      case 'approved': return '승인됨';
-      case 'rejected': return '거부됨';
-      case 'processed': return '처리됨';
-      default: return status;
-    }
+    const map = { pending: '대기 중', approved: '승인됨', rejected: '거부됨', processed: '처리됨' };
+    return map[status] || status;
   };
 
   return (
     <PageContainer>
       <Header>
         <Title>학생 대시보드</Title>
-        <SubTitle>이미지 생성을 위한 프롬프트를 제출하고 진행 상황을 확인하세요.</SubTitle>
+        <SubTitle>프롬프트를 제출하고 이미지 생성 상태를 확인하세요.</SubTitle>
       </Header>
       
       <ContentWrapper>
@@ -471,7 +434,7 @@ const Student = () => {
           <SectionTitle>프롬프트 제출</SectionTitle>
           <Form onSubmit={handleSubmitPrompt}>
             <TextArea
-              placeholder="생성하고 싶은 이미지에 대한 자세한 설명을 입력하세요..."
+              placeholder="생성할 이미지를 설명하세요..."
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               required
@@ -516,50 +479,40 @@ const Student = () => {
                   
                   {approvedImages.length > 0 ? (
                     <StatusList>
-                      {approvedImages.map((item, index) => (
-                        <StatusItem key={index}>
-                          <StatusHeader>
-                            <StatusTitle>승인된 이미지</StatusTitle>
-                            <StatusDate>
-                              {formatDate(item.createdAt)}
-                            </StatusDate>
-                          </StatusHeader>
-                          <ImagePreview>
-                            {item.path || item.url ? (
-                              <>
-                                <ApprovedImage 
-                                  src={item.isExternalUrl 
-                                    ? item.path // 외부 URL은 그대로 사용
-                                    : (item.path || item.url).startsWith('http') 
-                                      ? (item.path || item.url) 
-                                      : (item.path || item.url).startsWith('/uploads')
-                                        ? (item.path || item.url)
-                                        : `/uploads${(item.path || item.url).startsWith('/') ? (item.path || item.url) : '/' + (item.path || item.url)}`} 
-                                  alt="승인된 이미지" 
-                                  onError={(e) => {
-                                    console.error('이미지 로드 실패:', e);
-                                    e.target.src = 'https://via.placeholder.com/400x300?text=이미지+로드+실패';
-                                  }}
-                                />
-                                <DownloadButton
-                                  onClick={() => {
-                                    const downloadUrl = item.path || item.url;
-                                    window.location.href = downloadUrl;
-                                  }}
-                                >
-                                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M8 12L3 7L4.4 5.55L7 8.15V1H9V8.15L11.6 5.55L13 7L8 12Z" fill="currentColor"/>
-                                    <path d="M2 14V11H4V13H12V11H14V14H2Z" fill="currentColor"/>
-                                  </svg>
-                                  다운로드
-                                </DownloadButton>
-                              </>
-                            ) : (
-                              <p>이미지를 불러올 수 없습니다</p>
-                            )}
-                          </ImagePreview>
-                        </StatusItem>
-                      ))}
+                      {approvedImages.map((item, index) => {
+                        const url = item.isExternalUrl ?
+                          item.path :
+                          (item.path.startsWith('/uploads') ? item.path : `/uploads/${item.path}`);
+                        const fileName = `생성된_이미지_${formatDate(item.createdAt).replace(/[:\s]/g, '_')}.png`;
+
+                        return (
+                          <StatusItem key={index} status="approved">
+                            <StatusHeader>
+                              <StatusTitle>승인된 이미지</StatusTitle>
+                              <StatusDate>
+                                {formatDate(item.createdAt)}
+                              </StatusDate>
+                            </StatusHeader>
+                            <ImagePreview>
+                              <ApprovedImage 
+                                src={url} 
+                                alt="승인된 이미지"
+                                onError={(e) => {
+                                  console.error('이미지 로드 실패:', e);
+                                  e.target.src = 'https://via.placeholder.com/400x300?text=이미지+로드+실패';
+                                }}
+                              />
+                              <DownloadLink href={url} download={fileName}>
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M8 12L3 7L4.4 5.55L7 8.15V1H9V8.15L11.6 5.55L13 7L8 12Z" fill="currentColor"/>
+                                  <path d="M2 14V11H4V13H12V11H14V14H2Z" fill="currentColor"/>
+                                </svg>
+                                다운로드
+                              </DownloadLink>
+                            </ImagePreview>
+                          </StatusItem>
+                        );
+                      })}
                     </StatusList>
                   ) : (
                     <EmptyStatus>승인된 이미지가 없습니다.</EmptyStatus>
