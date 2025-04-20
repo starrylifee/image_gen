@@ -150,11 +150,17 @@ router.get('/status', authenticateStudent, async (req, res) => {
     const formattedImages = approvedImages.map(img => {
       const imageObj = img.toObject();
       
-      // 이미지 경로가 /uploads로 시작하지 않도록 수정
+      // 외부 URL인 경우 그대로 사용, 아니면 /uploads/ 경로 추가
       if (imageObj.path) {
-        imageObj.path = imageObj.path.startsWith('/') 
-          ? imageObj.path 
-          : `/${imageObj.path}`;
+        if (imageObj.isExternalUrl) {
+          // 외부 URL인 경우 그대로 사용
+          imageObj.path = imageObj.path;
+        } else {
+          // 내부 파일인 경우 /uploads 경로 추가
+          imageObj.path = imageObj.path.startsWith('/') 
+            ? `/uploads${imageObj.path}` 
+            : `/uploads/${imageObj.path}`;
+        }
       }
       
       return imageObj;

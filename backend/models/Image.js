@@ -5,6 +5,10 @@ const imageSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  isExternalUrl: {
+    type: Boolean,
+    default: false
+  },
   prompt: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Prompt',

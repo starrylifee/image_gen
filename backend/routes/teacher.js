@@ -260,15 +260,16 @@ router.post('/process-prompt', authenticateTeacher, async (req, res) => {
         
         console.log(`교사 ${teacher.name}(${teacher.username})의 크레딧이 1 차감되었습니다. 현재 잔액: ${teacher.credits}`);
         
-        // 이미지 생성 서비스 호출
-        const imagePath = await generateImage(prompt.content);
+        // 이미지 생성 서비스 호출 (URL 반환)
+        const imageUrl = await generateImage(prompt.content);
         
         // 이미지 안전성 평가
-        const safetyLevel = await evaluateImageSafety(imagePath);
+        const safetyLevel = await evaluateImageSafety(imageUrl);
         
         // 생성된 이미지 저장
         const newImage = new Image({
-          path: imagePath,
+          path: imageUrl,
+          isExternalUrl: true,  // 외부 URL임을 표시
           prompt: prompt._id,
           student: prompt.student,
           status: 'pending',
@@ -287,7 +288,8 @@ router.post('/process-prompt', authenticateTeacher, async (req, res) => {
           
           req.io.emit('imageGenerated', {
             _id: newImage._id,
-            path: `/uploads/${newImage.path}`,
+            path: imageUrl,  // URL 직접 전달
+            isExternalUrl: true,
             prompt: {
               _id: prompt._id,
               content: prompt.content
@@ -384,10 +386,15 @@ router.post('/process-image', authenticateTeacher, async (req, res) => {
     // 소켓을 통해 학생에게 알림
     if (req.io) {
       if (status === 'approved') {
+        // 외부 URL인 경우 그대로 전달, 아닌 경우 /uploads/ 경로 추가
+        const imageUrl = image.isExternalUrl 
+          ? image.path 
+          : `/uploads/${image.path}`;
+        
         req.io.emit('imageApproved', {
           imageId: image._id,
           studentId: image.student,
-          imageUrl: `/uploads/${image.path}`
+          imageUrl: imageUrl
         });
       } else if (status === 'rejected') {
         req.io.emit('imageRejected', {

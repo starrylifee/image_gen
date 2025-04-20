@@ -470,16 +470,18 @@ const Student = () => {
                             {item.path || item.url ? (
                               <>
                                 <ApprovedImage 
-                                  src={(item.path || item.url).startsWith('http') 
-                                    ? (item.path || item.url) 
-                                    : `${item.path || item.url}`} 
+                                  src={item.isExternalUrl 
+                                    ? item.path // 외부 URL은 그대로 사용
+                                    : (item.path || item.url).startsWith('http') 
+                                      ? (item.path || item.url) 
+                                      : `${item.path || item.url}`} 
                                   alt="승인된 이미지" 
                                   onError={(e) => {
                                     console.error('이미지 로드 실패:', e);
                                     e.target.src = 'https://via.placeholder.com/400x300?text=이미지+로드+실패';
                                   }}
                                 />
-                                <DownloadButton 
+                                <DownloadButton
                                   onClick={() => downloadImage(item.path || item.url, `생성된_이미지_${formatDate(item.createdAt).replace(/[:\s]/g, '_')}.png`)}
                                 >
                                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">

@@ -665,7 +665,11 @@ const Teacher = () => {
                     <>
                       <p>이미지 경로: {image.path}</p>
                       <Image 
-                        src={image.path.startsWith('http') ? image.path : `http://localhost:5000${image.path}`} 
+                        src={image.isExternalUrl 
+                          ? image.path // 외부 URL은 그대로 사용
+                          : image.path.startsWith('http') 
+                            ? image.path 
+                            : `http://localhost:5000${image.path}`} 
                         alt="생성된 이미지" 
                         onError={(e) => {
                           console.error('이미지 로드 실패:', e);

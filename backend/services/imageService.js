@@ -32,14 +32,11 @@ const ensureUploadsDirectory = () => {
 /**
  * 프롬프트를 기반으로 이미지 생성
  * @param {string} prompt 이미지 생성을 위한 프롬프트 텍스트
- * @returns {Promise<string>} 생성된 이미지의 파일 경로
+ * @returns {Promise<string>} 생성된 이미지의 URL
  */
 const generateImage = async (prompt) => {
   try {
     console.log(`이미지 생성 요청: "${prompt}"`);
-    
-    // 업로드 디렉토리 확인 및 생성
-    const uploadsDir = ensureUploadsDirectory();
     
     return new Promise((resolve, reject) => {
       // 대기열에 작업 추가
@@ -78,17 +75,17 @@ const processQueue = async () => {
   
   try {
     // 이미지 생성 실행
-    const imagePath = await generateRealImage(job.prompt);
+    const imageUrl = await generateRealImage(job.prompt);
     
     // 작업 완료 처리
-    job.resolve(imagePath);
+    job.resolve(imageUrl);
   } catch (error) {
     console.error('이미지 생성 작업 실패:', error);
     
     // 오류 발생 시 더미 이미지로 대체
     try {
-      const fallbackImage = await generateDummyImage(job.prompt + ' (API 오류로 인한 대체 이미지)');
-      job.resolve(fallbackImage);
+      const fallbackImageUrl = await generateDummyImageUrl(job.prompt + ' (API 오류로 인한 대체 이미지)');
+      job.resolve(fallbackImageUrl);
     } catch (fallbackError) {
       job.reject(error);
     }
@@ -102,50 +99,41 @@ const processQueue = async () => {
 /**
  * OpenAI API를 통한 실제 이미지 생성
  * @param {string} prompt 이미지 생성을 위한 프롬프트 텍스트
- * @returns {Promise<string>} 생성된 이미지의 파일 경로
+ * @returns {Promise<string>} 생성된 이미지의 URL
  */
 const generateRealImage = async (prompt) => {
   try {
     console.log('OpenAI DALL-E API를 통한 이미지 생성 시작');
     
-    // OpenAI API 호출
+    // OpenAI API 호출 - URL 형식으로 요청
     const response = await openai.images.generate({
       model: "dall-e-3",
       prompt: prompt,
       n: 1,
       size: "1024x1024",
-      response_format: "b64_json"
+      response_format: "url"  // URL 형식으로 변경
     });
     
-    // 응답에서 이미지 데이터 추출
-    const imageData = response.data[0].b64_json;
+    // 응답에서 이미지 URL 추출
+    const imageUrl = response.data[0].url;
+    console.log(`DALL-E 이미지 URL 생성 완료: ${imageUrl}`);
     
-    // Base64 디코딩하여 이미지 저장
-    const buffer = Buffer.from(imageData, 'base64');
-    const filename = `${uuidv4()}.png`;
-    const uploadsDir = path.join(__dirname, '../uploads');
-    const filePath = path.join(uploadsDir, filename);
-    
-    // 파일 저장
-    fs.writeFileSync(filePath, buffer);
-    console.log(`DALL-E 이미지 생성 완료: ${filename}`);
-    
-    return filename;
+    return imageUrl;
   } catch (error) {
     console.error('OpenAI 이미지 생성 오류:', error.message);
     console.log('API 오류로 인해 더미 이미지로 대체합니다.');
-    return await generateDummyImage(prompt + ' (API 오류로 인한 대체 이미지)');
+    return await generateDummyImageUrl(prompt + ' (API 오류로 인한 대체 이미지)');
   }
 };
 
 /**
  * 이미지 안전성 평가
- * @param {string} imagePath 안전성을 평가할 이미지 경로
+ * @param {string} imageUrl 안전성을 평가할 이미지 URL
  * @returns {Promise<string>} 안전성 수준 (safe, moderate, unsafe)
  */
-const evaluateImageSafety = async (imagePath) => {
+const evaluateImageSafety = async (imageUrl) => {
   try {
-    console.log(`이미지 안전성 평가: ${imagePath}`);
+    console.log(`이미지 안전성 평가: ${imageUrl}`);
     
     // 실제 안전성 평가 로직 (현재는 더미 구현)
     // OpenAI의 안전성 평가는 이미지 생성 시 기본 적용되므로 추가 평가 불필요
@@ -176,38 +164,23 @@ const getDummySafetyLevel = () => {
 };
 
 /**
- * 테스트용 더미 이미지 생성 함수
+ * 테스트용 더미 이미지 URL 생성 함수
  * @param {string} prompt 이미지 생성을 위한 프롬프트 텍스트
- * @returns {Promise<string>} 생성된 이미지의 파일 경로
+ * @returns {Promise<string>} 더미 이미지 URL
  */
-const generateDummyImage = async (prompt) => {
-  return new Promise((resolve, reject) => {
-    try {
-      // 이미지 생성 지연 시뮬레이션 (0.5~2초 랜덤)
-      const delay = Math.floor(Math.random() * 1500) + 500;
+const generateDummyImageUrl = async (prompt) => {
+  return new Promise((resolve) => {
+    // 이미지 생성 지연 시뮬레이션 (0.5~2초 랜덤)
+    const delay = Math.floor(Math.random() * 1500) + 500;
+    
+    setTimeout(() => {
+      // 외부 placeholder 서비스 사용하여 더미 이미지 URL 생성
+      const encodedPrompt = encodeURIComponent(prompt);
+      const dummyUrl = `https://via.placeholder.com/1024x1024?text=${encodedPrompt}`;
       
-      setTimeout(() => {
-        const filename = `${uuidv4()}.svg`;
-        const uploadsDir = path.join(__dirname, '../uploads');
-        const filePath = path.join(uploadsDir, filename);
-        
-        // 간단한 SVG 이미지 생성
-        const randomColor = `#${Math.floor(Math.random() * 16777215).toString(16)}`;
-        const svgContent = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
-            <rect width="400" height="300" fill="${randomColor}" />
-            <text x="50%" y="50%" font-family="Arial" font-size="24" fill="white" text-anchor="middle" dominant-baseline="middle">${prompt}</text>
-          </svg>
-        `;
-        
-        fs.writeFileSync(filePath, svgContent);
-        console.log(`더미 이미지 생성 완료: ${filename} (${delay}ms)`);
-        
-        resolve(filename);
-      }, delay);
-    } catch (error) {
-      reject(error);
-    }
+      console.log(`더미 이미지 URL 생성 완료: ${dummyUrl} (${delay}ms)`);
+      resolve(dummyUrl);
+    }, delay);
   });
 };
 
