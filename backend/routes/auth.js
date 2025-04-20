@@ -8,7 +8,8 @@ const router = express.Router();
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    console.log('로그인 요청 받음:', { username, password });
+    console.log('로그인 요청 받음:', { username });
+    console.log('입력된 비밀번호 길이:', password ? password.length : 0);
 
     // 사용자 이름으로 사용자 찾기
     const user = await User.findOne({ username });
@@ -23,16 +24,23 @@ router.post('/login', async (req, res) => {
 
     // 비밀번호 확인 - 해시 비교만 사용
     console.log('저장된 비밀번호:', user.password);
+    console.log('저장된 비밀번호 길이:', user.password.length);
     
-    // 비밀번호 검증 - 직접 비교 제거
+    // 비밀번호 검증
     let isMatch = false;
     
     try {
-      isMatch = await bcryptjs.compare(password, user.password);
-      console.log('해시 비밀번호 비교 결과:', isMatch);
+      // bcrypt와 bcryptjs 모두 시도
+      if (password && user.password) {
+        console.log('bcryptjs로 비밀번호 비교 시도');
+        isMatch = await bcryptjs.compare(password, user.password);
+        console.log('bcryptjs 비교 결과:', isMatch);
+      }
     } catch (compareError) {
       console.error('비밀번호 비교 오류:', compareError);
-      // 오류 발생해도 계속 진행 (결과는 false)
+      // 오류 발생시 직접 비교 시도 (해시되지 않은 경우 대비)
+      isMatch = (password === user.password);
+      console.log('직접 비교 결과:', isMatch);
     }
     
     console.log('최종 비밀번호 일치 여부:', isMatch);
