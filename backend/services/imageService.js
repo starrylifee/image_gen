@@ -10,16 +10,32 @@ const openai = new OpenAI({
 });
 
 // 대기열 관리를 위한 설정
-const MAX_CONCURRENT_JOBS = 3;
+const MAX_CONCURRENT_JOBS = 3;             // 최대 동시 처리 작업 수
+const API_RATE_LIMIT = 12;                 // 분당 최대 API 호출 수 (여유 있게 15에서 12로 설정)
+const API_CALL_INTERVAL = 60000 / API_RATE_LIMIT; // API 호출 간 간격 (밀리초)
 const pendingQueue = [];
 let activeJobs = 0;
+let lastAPICallTime = 0;                   // 마지막 API 호출 시간
+
+// 일괄 처리 상태 추적
+const batchProcessingStatus = {
+  isRunning: false,             // 일괄 처리 실행 중 여부
+  totalJobs: 0,                 // 총 작업 수
+  completedJobs: 0,             // 완료된 작업 수
+  failedJobs: 0,                // 실패한 작업 수
+  startTime: null,              // 시작 시간
+  estimatedEndTime: null,       // 예상 완료 시간
+  remainingTime: null,          // 남은 시간 (초)
+  progress: 0                   // 진행률 (%)
+};
 
 /**
  * 프롬프트를 기반으로 이미지 생성
  * @param {string} prompt 이미지 생성을 위한 프롬프트 텍스트
+ * @param {boolean} isBatch 일괄 처리 작업인지 여부
  * @returns {Promise<string>} 생성된 이미지의 URL
  */
-const generateImage = async (prompt) => {
+const generateImage = async (prompt, isBatch = false) => {
   try {
     console.log(`이미지 생성 요청: "${prompt}"`);
     console.log(`환경 변수 UPLOADS_DIR: ${process.env.UPLOADS_DIR || '설정되지 않음'}`);
@@ -29,7 +45,10 @@ const generateImage = async (prompt) => {
       const job = {
         prompt,
         resolve,
-        reject
+        reject,
+        isBatch,
+        addedTime: Date.now(),
+        attempts: 0
       };
       
       pendingQueue.push(job);
@@ -48,6 +67,84 @@ const generateImage = async (prompt) => {
 };
 
 /**
+ * 일괄 처리를 시작하고 상태를 초기화
+ * @param {number} totalJobs 총 작업 수
+ */
+const startBatchProcessing = (totalJobs) => {
+  batchProcessingStatus.isRunning = true;
+  batchProcessingStatus.totalJobs = totalJobs;
+  batchProcessingStatus.completedJobs = 0;
+  batchProcessingStatus.failedJobs = 0;
+  batchProcessingStatus.startTime = Date.now();
+  
+  // 예상 완료 시간 계산 (초당 API_RATE_LIMIT/60개 처리 가정)
+  const estimatedSeconds = Math.ceil(totalJobs / (API_RATE_LIMIT / 60));
+  batchProcessingStatus.estimatedEndTime = new Date(Date.now() + estimatedSeconds * 1000);
+  batchProcessingStatus.remainingTime = estimatedSeconds;
+  batchProcessingStatus.progress = 0;
+  
+  console.log(`일괄 처리 시작: 총 ${totalJobs}개 작업, 예상 완료 시간: ${estimatedSeconds}초 후`);
+};
+
+/**
+ * 일괄 처리 상태 업데이트
+ * @param {boolean} isSuccess 작업 성공 여부
+ */
+const updateBatchStatus = (isSuccess) => {
+  if (!batchProcessingStatus.isRunning) return;
+  
+  if (isSuccess) {
+    batchProcessingStatus.completedJobs++;
+  } else {
+    batchProcessingStatus.failedJobs++;
+  }
+  
+  const processedJobs = batchProcessingStatus.completedJobs + batchProcessingStatus.failedJobs;
+  batchProcessingStatus.progress = Math.round((processedJobs / batchProcessingStatus.totalJobs) * 100);
+  
+  // 남은 시간 재계산
+  const elapsed = (Date.now() - batchProcessingStatus.startTime) / 1000;
+  const rate = processedJobs / elapsed; // 초당 처리 속도
+  const remaining = (batchProcessingStatus.totalJobs - processedJobs) / rate;
+  batchProcessingStatus.remainingTime = Math.ceil(remaining);
+  
+  console.log(`일괄 처리 진행: ${processedJobs}/${batchProcessingStatus.totalJobs} (${batchProcessingStatus.progress}%), 남은 시간: ${batchProcessingStatus.remainingTime}초`);
+  
+  // 모든 작업이 완료되면 상태 초기화
+  if (processedJobs >= batchProcessingStatus.totalJobs) {
+    batchProcessingStatus.isRunning = false;
+    console.log('일괄 처리 완료');
+  }
+};
+
+/**
+ * 일괄 처리 상태 조회
+ * @returns {Object} 현재 일괄 처리 상태
+ */
+const getBatchStatus = () => {
+  return { ...batchProcessingStatus };
+};
+
+/**
+ * API 호출 간격 확인 및 지연
+ * @returns {Promise<void>}
+ */
+const checkAPIRateLimit = async () => {
+  const now = Date.now();
+  const timeSinceLastCall = now - lastAPICallTime;
+  
+  // API 호출 간격이 충분하지 않으면 대기
+  if (timeSinceLastCall < API_CALL_INTERVAL) {
+    const waitTime = API_CALL_INTERVAL - timeSinceLastCall;
+    console.log(`API 속도 제한 준수를 위해 ${waitTime}ms 대기`);
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+  }
+  
+  // 마지막 API 호출 시간 업데이트
+  lastAPICallTime = Date.now();
+};
+
+/**
  * 대기열 작업 처리
  */
 const processQueue = async () => {
@@ -63,27 +160,52 @@ const processQueue = async () => {
   console.log(`이미지 생성 작업 시작. 남은 대기 작업: ${pendingQueue.length}, 활성 작업: ${activeJobs}`);
   
   try {
+    // API 속도 제한 확인
+    await checkAPIRateLimit();
+    
     // 이미지 생성 실행
     const imageUrl = await generateRealImage(job.prompt);
     
     // 작업 완료 처리
     job.resolve(imageUrl);
+    
+    // 일괄 처리 작업이면 상태 업데이트
+    if (job.isBatch) {
+      updateBatchStatus(true);
+    }
   } catch (error) {
     console.error('이미지 생성 작업 실패:', error);
     
-    // 오류 발생 시 더미 이미지로 대체
-    try {
-      const fallbackImageUrl = await generateDummyImageUrl(job.prompt + ' (API 오류로 인한 대체 이미지)');
-      job.resolve(fallbackImageUrl);
-    } catch (fallbackError) {
-      // 더미 이미지 생성도 실패한 경우 기본 플레이스홀더 이미지 반환
-      const encodedPrompt = encodeURIComponent(job.prompt + ' (이미지 생성 실패)');
-      job.resolve(`https://via.placeholder.com/1024x1024?text=${encodedPrompt}`);
+    // 재시도 횟수가 3회 미만이면 작업 다시 큐에 추가
+    if (job.attempts < 3) {
+      job.attempts++;
+      console.log(`작업 재시도 (${job.attempts}/3): ${job.prompt.substring(0, 30)}...`);
+      pendingQueue.push(job);
+    } else {
+      // 재시도 횟수 초과 시 오류 응답
+      console.log(`최대 재시도 횟수 초과: ${job.prompt.substring(0, 30)}...`);
+      
+      // 오류 발생 시 더미 이미지로 대체
+      try {
+        const fallbackImageUrl = await generateDummyImageUrl(job.prompt + ' (API 오류로 인한 대체 이미지)');
+        job.resolve(fallbackImageUrl);
+      } catch (fallbackError) {
+        // 더미 이미지 생성도 실패한 경우 기본 플레이스홀더 이미지 반환
+        const encodedPrompt = encodeURIComponent(job.prompt + ' (이미지 생성 실패)');
+        job.resolve(`https://via.placeholder.com/1024x1024?text=${encodedPrompt}`);
+      }
+      
+      // 일괄 처리 작업이면 상태 업데이트 (실패)
+      if (job.isBatch) {
+        updateBatchStatus(false);
+      }
     }
   } finally {
     // 활성 작업 감소 및 다음 작업 처리
     activeJobs--;
-    processQueue();
+    
+    // 다음 작업 처리 예약 (즉시 실행하지 않고 약간의 지연 추가)
+    setTimeout(processQueue, 50);
   }
 };
 
@@ -177,5 +299,7 @@ const generateDummyImageUrl = async (prompt) => {
 
 module.exports = {
   generateImage,
-  evaluateImageSafety
+  evaluateImageSafety,
+  startBatchProcessing,
+  getBatchStatus
 }; 

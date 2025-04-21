@@ -136,6 +136,43 @@ export const teacherAPI = {
     } catch (error) {
       throw error.response?.data || { message: '이미지 처리 중 오류가 발생했습니다.' };
     }
+  },
+
+  // 프롬프트 일괄 처리 함수
+  batchProcessPrompts: async (promptIds = []) => {
+    try {
+      const response = await axios.post(`${API_URL}/teacher/batch-process-prompts`, {
+        promptIds: promptIds.length > 0 ? promptIds : undefined
+      });
+      return response.data;
+    } catch (error) {
+      // 오류 응답 데이터 확인 및 명확한 오류 메시지 전달
+      if (error.response?.data) {
+        const errorData = error.response.data;
+        
+        // 크레딧 부족 오류 메시지 명확히 처리
+        if (errorData.message && errorData.message.includes('크레딧이 부족')) {
+          throw {
+            ...errorData,
+            message: `크레딧이 부족하여 일괄 처리를 진행할 수 없습니다. (보유: ${errorData.credits || 0}, 필요: ${errorData.neededCredits || 1})`
+          };
+        }
+        
+        throw errorData;
+      }
+      
+      throw { message: '일괄 처리 중 오류가 발생했습니다.' };
+    }
+  },
+
+  // 일괄 처리 상태 조회 함수
+  getBatchStatus: async () => {
+    try {
+      const response = await axios.get(`${API_URL}/teacher/batch-status`);
+      return response.data.status;
+    } catch (error) {
+      throw error.response?.data || { message: '일괄 처리 상태 조회 중 오류가 발생했습니다.' };
+    }
   }
 };
 
@@ -209,6 +246,14 @@ export const setupSocketListeners = (socket, callbacks) => {
     });
   }
 
+  // 일괄 처리 완료 이벤트 (교사용)
+  if (callbacks.onBatchProcessingCompleted) {
+    socket.on('batchProcessingCompleted', (data) => {
+      console.log('소켓: batchProcessingCompleted 이벤트 수신', data);
+      callbacks.onBatchProcessingCompleted(data);
+    });
+  }
+
   return () => {
     socket.off('promptRejected');
     socket.off('promptApproved');
@@ -216,5 +261,6 @@ export const setupSocketListeners = (socket, callbacks) => {
     socket.off('imageRejected');
     socket.off('new_prompt_submitted');
     socket.off('imageGenerated');
+    socket.off('batchProcessingCompleted');
   };
 }; 

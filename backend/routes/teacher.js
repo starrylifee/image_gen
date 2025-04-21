@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Prompt = require('../models/Prompt');
 const Image = require('../models/Image');
-const { generateImage, evaluateImageSafety } = require('../services/imageService');
+const { generateImage, evaluateImageSafety, startBatchProcessing, getBatchStatus } = require('../services/imageService');
 const bcryptjs = require('bcryptjs');
 
 // 교사 인증 미들웨어
@@ -747,6 +747,177 @@ router.get('/credit-history', authenticateTeacher, async (req, res) => {
     res.status(500).json({
       success: false,
       message: '크레딧 내역 조회 중 오류가 발생했습니다'
+    });
+  }
+});
+
+// 일괄 프롬프트 처리 라우트
+router.post('/batch-process-prompts', authenticateTeacher, async (req, res) => {
+  try {
+    // 교사 ID 가져오기
+    const teacherId = req.user._id;
+    
+    // 해당 교사에게 배정된 학생 ID 목록 조회
+    let studentIds = [];
+    
+    // 교사에게 직접 할당된 학생이 있는 경우
+    if (req.user.metadata && req.user.metadata.studentIds && req.user.metadata.studentIds.length > 0) {
+      studentIds = req.user.metadata.studentIds;
+    } else {
+      // 해당 교사를 참조하는 모든 학생 조회
+      const students = await User.find({
+        role: 'student',
+        'metadata.teacherId': teacherId
+      });
+      
+      studentIds = students.map(student => student._id);
+    }
+    
+    // 승인할 프롬프트 목록 조회
+    const query = { status: 'pending' };
+    
+    // 관리자가 아닌 경우 학생 필터링 적용
+    if (req.user.role !== 'admin' && studentIds.length > 0) {
+      query.student = { $in: studentIds };
+    }
+    
+    // 요청에서 특정 프롬프트 ID들이 전달된 경우 해당 프롬프트만 처리
+    if (req.body.promptIds && Array.isArray(req.body.promptIds) && req.body.promptIds.length > 0) {
+      query._id = { $in: req.body.promptIds };
+    }
+    
+    const pendingPrompts = await Prompt.find(query)
+      .populate('student', 'name username')
+      .sort({ createdAt: 1 });
+    
+    if (pendingPrompts.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '처리할 프롬프트가 없습니다'
+      });
+    }
+    
+    console.log(`일괄 처리할 프롬프트 수: ${pendingPrompts.length}`);
+    
+    // 교사 크레딧 확인
+    if (req.user.credits < pendingPrompts.length) {
+      return res.status(400).json({
+        success: false,
+        message: `크레딧이 부족합니다. 필요: ${pendingPrompts.length}, 보유: ${req.user.credits}`,
+        credits: req.user.credits,
+        neededCredits: pendingPrompts.length
+      });
+    }
+    
+    // 일괄 처리 시작
+    startBatchProcessing(pendingPrompts.length);
+    
+    // 비동기 처리 시작 (응답은 먼저 보내고 백그라운드에서 처리)
+    res.status(202).json({
+      success: true,
+      message: `${pendingPrompts.length}개의 프롬프트 일괄 처리가 시작되었습니다`,
+      batchId: Date.now().toString(),
+      totalPrompts: pendingPrompts.length
+    });
+    
+    // 각 프롬프트에 대한 비동기 처리
+    (async () => {
+      let successCount = 0;
+      let errorCount = 0;
+      
+      // 크레딧 차감
+      req.user.credits -= pendingPrompts.length;
+      await req.user.save();
+      
+      // 각 프롬프트 순차 처리
+      for (const prompt of pendingPrompts) {
+        try {
+          // 프롬프트 상태 업데이트
+          prompt.status = 'approved';
+          prompt.reviewedBy = req.user._id;
+          prompt.reviewedAt = Date.now();
+          await prompt.save();
+          
+          // 소켓을 통해 승인 알림
+          if (req.io) {
+            req.io.emit('promptApproved', {
+              promptId: prompt._id,
+              studentId: prompt.student._id
+            });
+          }
+          
+          console.log(`[일괄 처리] 프롬프트 승인: ${prompt._id}`);
+          
+          // 이미지 생성
+          try {
+            const imageUrl = await generateImage(prompt.content, true); // true = 일괄 처리 작업
+            const safetyLevel = await evaluateImageSafety(imageUrl);
+            
+            // 이미지 정보 저장
+            const newImage = new Image({
+              path: imageUrl,
+              isExternalUrl: true,
+              prompt: prompt._id,
+              student: prompt.student._id,
+              status: 'pending',
+              safetyLevel
+            });
+            
+            await newImage.save();
+            
+            // 프롬프트와 이미지 연결
+            prompt.generatedImage = newImage._id;
+            await prompt.save();
+            
+            console.log(`[일괄 처리] 이미지 생성 완료: ${newImage._id} (프롬프트: ${prompt._id})`);
+            
+            successCount++;
+          } catch (imageError) {
+            console.error(`[일괄 처리] 이미지 생성 실패 (프롬프트: ${prompt._id}):`, imageError);
+            errorCount++;
+          }
+        } catch (promptError) {
+          console.error(`[일괄 처리] 프롬프트 처리 오류 (${prompt._id}):`, promptError);
+          errorCount++;
+        }
+      }
+      
+      console.log(`[일괄 처리] 완료: 성공 ${successCount}개, 실패 ${errorCount}개`);
+      
+      // 완료 이벤트 전송
+      if (req.io) {
+        req.io.emit('batchProcessingCompleted', {
+          teacherId: req.user._id,
+          totalProcessed: pendingPrompts.length,
+          successCount,
+          errorCount
+        });
+      }
+    })().catch(error => {
+      console.error('[일괄 처리] 비동기 처리 중 오류 발생:', error);
+    });
+  } catch (error) {
+    console.error('일괄 프롬프트 처리 오류:', error);
+    res.status(500).json({
+      success: false,
+      message: '일괄 처리 중 오류가 발생했습니다'
+    });
+  }
+});
+
+// 일괄 처리 상태 조회 라우트
+router.get('/batch-status', authenticateTeacher, (req, res) => {
+  try {
+    const status = getBatchStatus();
+    res.json({
+      success: true,
+      status
+    });
+  } catch (error) {
+    console.error('일괄 처리 상태 조회 오류:', error);
+    res.status(500).json({
+      success: false,
+      message: '상태 조회 중 오류가 발생했습니다'
     });
   }
 });
