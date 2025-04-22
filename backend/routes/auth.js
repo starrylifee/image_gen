@@ -30,7 +30,7 @@ router.post('/login', async (req, res) => {
     let isMatch = false;
     
     // 해시된 비밀번호인지 확인 (bcrypt 해시는 $2a$, $2b$ 또는 $2y$로 시작)
-    const isHashed = user.password.startsWith('$2');
+    const isHashed = user.password.startsWith('$2a$') || user.password.startsWith('$2b$') || user.password.startsWith('$2y$');
     console.log('비밀번호 해싱 여부:', isHashed ? '해싱됨' : '해싱되지 않음');
     
     if (isHashed) {
