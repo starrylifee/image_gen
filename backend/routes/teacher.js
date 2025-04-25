@@ -334,12 +334,15 @@ router.post('/process-prompt', authenticateTeacher, async (req, res) => {
           
           // 소켓을 통해 학생에게 오류 알림
           if (req.io) {
-            req.io.emit('promptProcessed', {
+            // 특정 학생에게만 이벤트 전송
+            req.io.to(prompt.student.toString()).emit('promptProcessed', {
               promptId: prompt._id,
               studentId: prompt.student,
               status: 'processed',
               message: '이미지 생성 중 오류가 발생했습니다'
             });
+            
+            console.log(`프롬프트 처리 완료 이벤트를 학생(${prompt.student})에게만 전송했습니다`);
           }
           
           console.log(`프롬프트 ID: ${prompt._id}의 상태를 'processed'로 변경했습니다. (이미지 생성 실패)`);
@@ -350,10 +353,14 @@ router.post('/process-prompt', authenticateTeacher, async (req, res) => {
     } else if (status === 'rejected') {
       // 거부된 경우 소켓을 통해 학생에게 알림
       if (req.io) {
-        req.io.emit('promptRejected', {
+        // 특정 학생에게만 이벤트 전송
+        req.io.to(prompt.student.toString()).emit('promptRejected', {
           promptId: prompt._id,
-          studentId: prompt.student
+          studentId: prompt.student,
+          rejectionReason: prompt.rejectionReason
         });
+        
+        console.log(`프롬프트 거부 이벤트를 학생(${prompt.student})에게만 전송했습니다`);
       }
     }
     
@@ -431,16 +438,24 @@ router.post('/process-image', authenticateTeacher, async (req, res) => {
           ? image.path 
           : `/uploads/${image.path}`;
         
-        req.io.emit('imageApproved', {
+        // 특정 학생에게만 이벤트 전송 (room 기능 사용)
+        req.io.to(image.student.toString()).emit('imageApproved', {
           imageId: image._id,
           studentId: image.student,
-          imageUrl: imageUrl
+          imageUrl: imageUrl,
+          promptId: image.prompt // 프롬프트 ID도 함께 전송
         });
+        
+        console.log(`이미지 승인 이벤트를 학생(${image.student})에게만 전송했습니다`);
       } else if (status === 'rejected') {
-        req.io.emit('imageRejected', {
+        // 특정 학생에게만 이벤트 전송
+        req.io.to(image.student.toString()).emit('imageRejected', {
           imageId: image._id,
-          studentId: image.student
+          studentId: image.student,
+          rejectionReason: image.rejectionReason
         });
+        
+        console.log(`이미지 거부 이벤트를 학생(${image.student})에게만 전송했습니다`);
       }
     }
     
@@ -840,10 +855,13 @@ router.post('/batch-process-prompts', authenticateTeacher, async (req, res) => {
           
           // 소켓을 통해 승인 알림
           if (req.io) {
-            req.io.emit('promptApproved', {
+            // 특정 학생에게만 이벤트 전송
+            req.io.to(prompt.student._id.toString()).emit('promptApproved', {
               promptId: prompt._id,
               studentId: prompt.student._id
             });
+            
+            console.log(`[일괄 처리] 프롬프트 승인 이벤트를 학생(${prompt.student._id})에게만 전송했습니다`);
           }
           
           console.log(`[일괄 처리] 프롬프트 승인: ${prompt._id}`);

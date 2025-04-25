@@ -20,6 +20,13 @@ class SocketService {
     this.socket.on('connect', () => {
       console.log('소켓 연결 성공!');
       this.isConnected = true;
+      
+      // 연결 성공 시 사용자 인증 정보 전송
+      const user = JSON.parse(localStorage.getItem('user'));
+      if (user && user._id) {
+        this.socket.emit('authenticate', user);
+        console.log('소켓 인증 정보 전송:', user._id);
+      }
     });
 
     this.socket.on('disconnect', () => {

@@ -42,6 +42,15 @@ const io = socketIO(server, {
 io.on('connection', (socket) => {
   console.log('새로운 클라이언트 연결:', socket.id);
   
+  // 사용자 인증 및 room 설정
+  socket.on('authenticate', (userData) => {
+    if (userData && userData._id) {
+      // 사용자를 자신의 ID를 이름으로 하는 room에 참여시킴
+      socket.join(userData._id);
+      console.log(`사용자 ${userData._id}가 자신의 room에 참여했습니다`);
+    }
+  });
+  
   socket.on('disconnect', () => {
     console.log('클라이언트 연결 해제:', socket.id);
   });

@@ -92,20 +92,30 @@ router.post('/submit-prompt', authenticateStudent, async (req, res) => {
     
     // 소켓을 통해 교사에게 새 프롬프트 알림
     if (req.io) {
-      console.log('소켓 이벤트 전송: new_prompt_submitted');
+      // 학생의 교사 ID 찾기
+      const teacherId = req.user.metadata?.teacherId;
       
-      req.io.emit('new_prompt_submitted', {
-        _id: newPrompt._id,
-        content: newPrompt.content,
-        student: {
-          _id: req.user._id,
-          name: req.user.name,
-          username: req.user.username
-        },
-        createdAt: newPrompt.createdAt
-      });
-    } else {
-      console.log('소켓 객체가 없습니다! io 객체가 req에 연결되지 않음');
+      if (teacherId) {
+        // 해당 교사에게만 이벤트 전송
+        req.io.to(teacherId.toString()).emit('new_prompt_submitted', {
+          promptId: newPrompt._id,
+          studentId: req.user._id,
+          studentName: req.user.name,
+          content: promptContent.substring(0, 30) + (promptContent.length > 30 ? '...' : '')
+        });
+        
+        console.log(`새 프롬프트 제출 이벤트를 교사(${teacherId})에게만 전송했습니다`);
+      } else {
+        // 교사 ID가 없는 경우 모든 교사에게 브로드캐스트
+        req.io.emit('new_prompt_submitted', {
+          promptId: newPrompt._id,
+          studentId: req.user._id,
+          studentName: req.user.name,
+          content: promptContent.substring(0, 30) + (promptContent.length > 30 ? '...' : '')
+        });
+        
+        console.log('새 프롬프트 제출 이벤트를 모든 교사에게 브로드캐스트했습니다');
+      }
     }
     
     res.status(201).json({
