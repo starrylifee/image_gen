@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Prompt = require('../models/Prompt');
 const Image = require('../models/Image');
+const { filterValidImages } = require('../utils/urlValidator');
 
 // 학생 인증 미들웨어
 const authenticateStudent = async (req, res, next) => {
@@ -187,10 +188,17 @@ router.get('/status', authenticateStudent, async (req, res) => {
       }
     });
 
+    // 유효한 이미지만 필터링 (만료된 URL 제거 및 DB 정리)
+    const validImages = await filterValidImages(formattedImages);
+    
+    if (formattedImages.length !== validImages.length) {
+      console.log(`학생 ${studentId}의 만료된 이미지 ${formattedImages.length - validImages.length}개가 필터링되었습니다`);
+    }
+
     res.json({
       success: true,
       pendingPrompts,
-      approvedImages: formattedImages
+      approvedImages: validImages
     });
   } catch (error) {
     console.error('학생 상태 조회 오류:', error);
