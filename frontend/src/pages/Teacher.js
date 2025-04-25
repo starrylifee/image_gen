@@ -205,6 +205,33 @@ const ReasonInput = styled.textarea`
   }
 `;
 
+// 일괄 처리 버튼 스타일 추가
+const BatchButtonContainer = styled.div`
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: flex-end;
+`;
+
+const BatchButton = styled.button`
+  background-color: #4caf50;
+  color: white;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.3s;
+  
+  &:hover:not(:disabled) {
+    background-color: #45a049;
+  }
+  
+  &:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+  }
+`;
+
 const EmptyMessage = styled.div`
   padding: 20px;
   text-align: center;
@@ -666,54 +693,119 @@ const Teacher = () => {
     }
   };
 
+  // 일괄 처리 핸들러 함수 추가
+  const handleBatchProcessPrompts = async () => {
+    if (pendingPrompts.length === 0) {
+      setNotification({
+        show: true,
+        message: '처리할 프롬프트가 없습니다.',
+        type: 'warning'
+      });
+      return;
+    }
+
+    // 확인 메시지
+    if (!window.confirm(`${pendingPrompts.length}개의 프롬프트를 일괄 승인하시겠습니까? 필요한 크레딧: ${pendingPrompts.length}`)) {
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      // 모든 프롬프트 ID 목록 추출
+      const promptIds = pendingPrompts.map(prompt => prompt._id);
+      
+      // 일괄 처리 API 호출
+      const result = await teacherAPI.batchProcessPrompts(promptIds);
+      
+      // 성공 알림 표시
+      setNotification({
+        show: true,
+        message: `${pendingPrompts.length}개의 프롬프트가 일괄 처리되었습니다. 이미지가 생성되는 동안 기다려주세요.`,
+        type: 'success'
+      });
+      
+      // 프롬프트 목록 비우기
+      setPendingPrompts([]);
+      
+    } catch (err) {
+      console.error('일괄 처리 중 오류 발생:', err);
+      
+      // 오류 메시지 처리
+      let errorMessage = '일괄 처리 중 오류가 발생했습니다.';
+      
+      if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      // 오류 알림 표시
+      setNotification({
+        show: true,
+        message: errorMessage,
+        type: 'error'
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const renderContent = () => {
     if (activeTab === 'prompts') {
       return (
         pendingPrompts.length === 0 ? (
           <EmptyMessage>검토할 프롬프트가 없습니다.</EmptyMessage>
         ) : (
-          <ItemsList>
-            {pendingPrompts.map((prompt) => (
-              <ItemCard key={prompt._id}>
-                <ItemHeader>
-                  <ItemInfo>
-                    <ItemTitle>프롬프트 요청</ItemTitle>
-                    <StudentInfo>
-                      학생: {prompt.student ? prompt.student.name : '알 수 없음'} ({prompt.student ? prompt.student.username : ''})
-                    </StudentInfo>
-                    <Date>
-                      제출일: {formatDate(prompt.createdAt)}
-                    </Date>
-                  </ItemInfo>
-                </ItemHeader>
-                
-                <PromptContent>{prompt.content}</PromptContent>
-                
-                {prompt.status === 'rejected' && (
-                  <ReasonInput
-                    placeholder="거부 사유를 입력하세요..."
-                    value={rejectionReasons[prompt._id] || ''}
-                    onChange={(e) => handleReasonChange(prompt._id, e.target.value)}
-                  />
-                )}
-                
-                <ActionButtons>
-                  <ApproveButton 
-                    onClick={() => handleProcessPrompt(prompt._id, 'approved')}
-                    disabled={processing}
-                  >
-                    승인
-                  </ApproveButton>
-                  <RejectButton 
-                    onClick={() => handleProcessPrompt(prompt._id, 'rejected')}
-                    disabled={processing}
-                  >
-                    거부
-                  </RejectButton>
-                </ActionButtons>
-              </ItemCard>
-            ))}
-          </ItemsList>
+          <>
+            <BatchButtonContainer>
+              <BatchButton 
+                onClick={handleBatchProcessPrompts}
+                disabled={processing}
+              >
+                모든 프롬프트 일괄 승인 ({pendingPrompts.length}개)
+              </BatchButton>
+            </BatchButtonContainer>
+            <ItemsList>
+              {pendingPrompts.map((prompt) => (
+                <ItemCard key={prompt._id}>
+                  <ItemHeader>
+                    <ItemInfo>
+                      <ItemTitle>프롬프트 요청</ItemTitle>
+                      <StudentInfo>
+                        학생: {prompt.student ? prompt.student.name : '알 수 없음'} ({prompt.student ? prompt.student.username : ''})
+                      </StudentInfo>
+                      <Date>
+                        제출일: {formatDate(prompt.createdAt)}
+                      </Date>
+                    </ItemInfo>
+                  </ItemHeader>
+                  
+                  <PromptContent>{prompt.content}</PromptContent>
+                  
+                  {prompt.status === 'rejected' && (
+                    <ReasonInput
+                      placeholder="거부 사유를 입력하세요..."
+                      value={rejectionReasons[prompt._id] || ''}
+                      onChange={(e) => handleReasonChange(prompt._id, e.target.value)}
+                    />
+                  )}
+                  
+                  <ActionButtons>
+                    <ApproveButton 
+                      onClick={() => handleProcessPrompt(prompt._id, 'approved')}
+                      disabled={processing}
+                    >
+                      승인
+                    </ApproveButton>
+                    <RejectButton 
+                      onClick={() => handleProcessPrompt(prompt._id, 'rejected')}
+                      disabled={processing}
+                    >
+                      거부
+                    </RejectButton>
+                  </ActionButtons>
+                </ItemCard>
+              ))}
+            </ItemsList>
+          </>
         )
       );
     } else if (activeTab === 'images') {
