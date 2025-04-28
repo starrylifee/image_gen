@@ -232,6 +232,65 @@ const Student = () => {
   const [approvedImages, setApprovedImages] = useState([]); // 승인된 이미지 목록
   const [notification, setNotification] = useState({ show: false, message: '', type: 'info' }); // 알림 상태
 
+  // 이미지 다운로드 핸들러
+  const handleDownloadImage = async (url, fileName) => {
+    try {
+      // 이미지 URL이 상대 경로인 경우 절대 경로로 변환
+      const absoluteUrl = url.startsWith('http') 
+        ? url 
+        : `http://localhost:5000${url.startsWith('/') ? url : `/${url}`}`;
+      
+      console.log('이미지 다운로드 시도:', absoluteUrl);
+      
+      // fetch를 사용하여 이미지 데이터 가져오기
+      const response = await fetch(absoluteUrl);
+      
+      if (!response.ok) {
+        throw new Error('이미지를 가져오는데 실패했습니다');
+      }
+      
+      // Blob으로 변환
+      const blob = await response.blob();
+      
+      // Blob URL 생성
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      // 다운로드 링크 생성 및 클릭
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName || 'image.png'; // 파일명 설정
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      
+      // 자동 클릭으로 다운로드 시작
+      link.click();
+      
+      // 정리
+      setTimeout(() => {
+        window.URL.revokeObjectURL(blobUrl);
+        document.body.removeChild(link);
+      }, 100);
+      
+      setNotification({
+        show: true,
+        message: '이미지가 다운로드 폴더에 저장되었습니다.',
+        type: 'success'
+      });
+      
+      // 5초 후 알림 닫기
+      setTimeout(() => {
+        setNotification(prev => ({ ...prev, show: false }));
+      }, 5000);
+    } catch (error) {
+      console.error('이미지 다운로드 오류:', error);
+      setNotification({
+        show: true,
+        message: `다운로드 중 오류가 발생했습니다: ${error.message}`,
+        type: 'error'
+      });
+    }
+  };
+
   // 학생 상태 조회
   const fetchStatus = async () => {
     setLoading(true);
@@ -471,8 +530,14 @@ const Student = () => {
                                 e.target.src = 'https://via.placeholder.com/400x300?text=이미지+로드+실패';
                               }}
                             />
-                            {/* 다운로드 링크: download 속성으로 즉시 저장 */}
-                            <DownloadLink href={url} download={fileName}>
+                            {/* 다운로드 링크: fetch API로 다운로드 처리 */}
+                            <DownloadLink 
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleDownloadImage(url, fileName);
+                              }}
+                              href="#"
+                            >
                               {/* SVG 아이콘 */}
                               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M8 12L3 7L4.4 5.55L7 8.15V1H9V8.15L11.6 5.55L13 7L8 12Z" fill="currentColor"/>
