@@ -827,6 +827,12 @@ router.post('/batch-process-prompts', authenticateTeacher, async (req, res) => {
     // 일괄 처리 시작
     startBatchProcessing(pendingPrompts.length);
     
+    // 먼저 모든 프롬프트 상태를 'processing'으로 변경하여 중복 처리 방지
+    for (const prompt of pendingPrompts) {
+      prompt.status = 'processing'; // 일시적인 처리 중 상태
+      await prompt.save();
+    }
+    
     // 비동기 처리 시작 (응답은 먼저 보내고 백그라운드에서 처리)
     res.status(202).json({
       success: true,
@@ -847,6 +853,13 @@ router.post('/batch-process-prompts', authenticateTeacher, async (req, res) => {
       // 각 프롬프트 순차 처리
       for (const prompt of pendingPrompts) {
         try {
+          // 프롬프트 상태가 여전히 processing인지 확인 (중복 처리 방지)
+          const currentPrompt = await Prompt.findById(prompt._id);
+          if (currentPrompt.status !== 'processing') {
+            console.log(`[일괄 처리] 프롬프트(${prompt._id})가 이미 처리되었습니다. 상태: ${currentPrompt.status}`);
+            continue;
+          }
+          
           // 프롬프트 상태 업데이트
           prompt.status = 'approved';
           prompt.reviewedBy = req.user._id;
