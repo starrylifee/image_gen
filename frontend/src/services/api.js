@@ -149,17 +149,14 @@ export const teacherAPI = {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('token')}`
-          },
-          validateStatus: function (status) {
-            return status < 500; // 500 이상의 상태 코드만 reject
           }
         }
       );
       
       console.log('일괄 처리 API 응답:', response);
       
-      if (response.status >= 400) {
-        throw new Error(response.data?.message || '서버 오류가 발생했습니다');
+      if (!response.data.success) {
+        throw new Error(response.data.message || '서버 오류가 발생했습니다');
       }
       
       return response.data;
