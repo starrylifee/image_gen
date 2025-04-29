@@ -358,10 +358,6 @@ const Teacher = () => {
   };
 
   useEffect(() => {
-    fetchItems();
-  }, [activeTab]);
-
-  useEffect(() => {
     // 소켓 연결 및 이벤트 리스너 설정
     const socket = socketService.connect();
     
@@ -389,10 +385,8 @@ const Teacher = () => {
         console.log('일괄 처리 완료 이벤트 수신:', data);
         setBatchProcessing(false);
         setBatchProcessingIds([]);
-        if (activeTab === 'prompts') {
-          console.log('프롬프트 목록 새로고침');
-          fetchItems();
-        }
+        // 일괄 처리 완료 시점에만 목록 새로고침
+        fetchItems();
       },
       onPromptStatusChange: (data) => {
         // 프롬프트 상태가 변경되면 목록에서 제거
@@ -404,9 +398,6 @@ const Teacher = () => {
         }
       }
     });
-    
-    // 초기 데이터 로드
-    fetchItems();
     
     return () => {
       cleanup && cleanup();
