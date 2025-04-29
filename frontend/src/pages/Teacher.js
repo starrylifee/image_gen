@@ -269,17 +269,22 @@ const AlertMessage = styled.div`
 
 // 날짜 포맷 유틸리티 함수 추가
 const formatDate = (dateString) => {
+  console.log('날짜 변환 입력값:', dateString, typeof dateString);
+  
   if (!dateString) return '날짜 정보 없음';
   
   // 문자열이 아닌 경우 문자열로 변환
   const dateStr = String(dateString);
+  console.log('문자열 변환 후:', dateStr);
   
   try {
     // 날짜 객체 생성 시도
     const dateObj = new Date(dateStr);
+    console.log('날짜 객체 생성 결과:', dateObj);
     
     // 유효한 날짜인지 확인
     if (isNaN(dateObj.getTime())) {
+      console.log('유효하지 않은 날짜');
       return dateStr;
     }
     
@@ -290,8 +295,9 @@ const formatDate = (dateString) => {
     const hours = String(dateObj.getHours()).padStart(2, '0');
     const minutes = String(dateObj.getMinutes()).padStart(2, '0');
     
-    // 한국식 날짜 형식으로 반환
-    return `${year}-${month}-${day} ${hours}:${minutes}`;
+    const formattedDate = `${year}-${month}-${day} ${hours}:${minutes}`;
+    console.log('포맷팅된 날짜:', formattedDate);
+    return formattedDate;
   } catch (err) {
     console.error('날짜 변환 오류:', err);
     return dateStr;
