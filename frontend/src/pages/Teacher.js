@@ -270,22 +270,27 @@ const AlertMessage = styled.div`
 // 날짜 포맷 유틸리티 함수 추가
 const formatDate = (dateString) => {
   if (!dateString) return '날짜 정보 없음';
+  
   try {
-    // ISO 문자열로 변환 시도
-    const isoString = new Date(dateString).toISOString();
-    // 한국 시간으로 변환
-    const options = {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    };
-    return new Date(isoString).toLocaleString('ko-KR', options);
+    // 문자열이 ISO 형식인지 확인
+    if (typeof dateString === 'string' && dateString.includes('T')) {
+      const date = new Date(dateString);
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleString('ko-KR', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        });
+      }
+    }
+    
+    // 일반 문자열인 경우 그대로 반환
+    return String(dateString);
   } catch (err) {
     console.error('날짜 변환 오류:', err);
-    // 원본 문자열 반환
     return String(dateString);
   }
 };
