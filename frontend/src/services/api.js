@@ -143,7 +143,7 @@ export const teacherAPI = {
     try {
       console.log('일괄 처리 API 요청 시작:', promptIds);
       const response = await axios.post(
-        `${API_URL}/api/teacher/batch-process-prompts`,
+        `${API_URL}/teacher/batch-process-prompts`,
         { promptIds },
         {
           headers: {
@@ -174,6 +174,12 @@ export const teacherAPI = {
           data: error.config?.data
         }
       });
+      
+      // 서버 오류 메시지가 없는 경우 기본 메시지 사용
+      if (!error.response?.data?.message) {
+        error.message = '서버와의 통신 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+      }
+      
       throw error;
     }
   },
