@@ -875,8 +875,7 @@ router.post('/batch-process-prompts', authenticateTeacher, async (req, res) => {
       });
     }
 
-    // 일괄 처리 시작 상태 (선택적)
-    // startBatchProcessing(pendingPrompts.length);
+    console.log(`[일괄 처리] 초기 상태 업데이트 시작. 대상 프롬프트 수: ${pendingPrompts.length}`); // 로그 추가
 
     // 먼저 모든 프롬프트 상태를 'processing'으로 변경 시도 (오류 처리 강화)
     let updateErrors = [];
@@ -900,10 +899,12 @@ router.post('/batch-process-prompts', authenticateTeacher, async (req, res) => {
 
     // 실제로 처리할 프롬프트가 없는 경우 (모두 초기 업데이트 실패)
     if (promptsToProcess.length === 0) {
+        console.error('[일괄 처리] 모든 프롬프트 초기 상태 업데이트 실패. 처리 중단.', updateErrors);
+        // 500 대신 409 Conflict 또는 다른 적절한 상태 코드 사용 고려
         return res.status(500).json({
             success: false,
             message: '모든 프롬프트의 초기 상태 업데이트에 실패하여 처리를 시작할 수 없습니다.',
-            errors: updateErrors
+            errors: updateErrors // 실제 오류 내용을 포함하여 반환
         });
     }
 
