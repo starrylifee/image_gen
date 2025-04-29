@@ -928,11 +928,23 @@ const Teacher = () => {
                       // 로그 추가: 각 이미지 데이터 확인
                       console.log(`[Teacher.js] Rendering image: ID=${image._id}, Path=${image.path}, IsExternal=${image.isExternalUrl}`);
                       
-                      const imageUrl = image.isExternalUrl 
-                        ? image.path 
-                        : image.path.startsWith('http') 
-                          ? image.path 
-                          : `https://port-0-imagegen-backend-7xwyjq992lliylnmq.sel4.cloudtype.app${image.path}`;
+                      // 이미지 서버 URL 지정 (백엔드 서버와 다를 수 있음)
+                      const IMAGE_SERVER_URL = 'https://port-0-imagegen-backend-7xwyjq992lliylnmq.sel4.cloudtype.app';
+                      
+                      // 이미지 URL 구성 로직 수정
+                      let imageUrl;
+                      if (image.isExternalUrl) {
+                        imageUrl = image.path;
+                      } else if (image.path.startsWith('http')) {
+                        imageUrl = image.path;
+                      } else {
+                        // 경로가 '/uploads/'로 시작하지 않으면 추가
+                        if (!image.path.startsWith('/')) {
+                          imageUrl = `${IMAGE_SERVER_URL}/${image.path}`;
+                        } else {
+                          imageUrl = `${IMAGE_SERVER_URL}${image.path}`;
+                        }
+                      }
                       
                       // 로그 추가: 계산된 이미지 URL 확인
                       console.log(`[Teacher.js] Calculated image URL for ID ${image._id}:`, imageUrl);
