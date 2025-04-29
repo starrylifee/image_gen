@@ -270,12 +270,15 @@ const AlertMessage = styled.div`
 // 날짜 포맷 유틸리티 함수 추가
 const formatDate = (dateString) => {
   if (!dateString) return '날짜 정보 없음';
-  
   try {
-    return new Date(dateString).toLocaleString();
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+      throw new Error('유효하지 않은 날짜');
+    }
+    return date.toLocaleString('ko-KR');
   } catch (err) {
     console.error('날짜 변환 오류:', err);
-    return dateString || '날짜 정보 없음';
+    return '날짜 정보 없음';
   }
 };
 
@@ -735,47 +738,37 @@ const Teacher = () => {
       return;
     }
 
-    // 확인 메시지
-    if (!window.confirm(`${pendingPrompts.length}개의 프롬프트를 일괄 승인하시겠습니까? 필요한 크레딧: ${pendingPrompts.length}`)) {
-      return;
-    }
-
     setBatchProcessing(true);
     try {
-      // 모든 프롬프트 ID 목록 추출
-      const promptIds = pendingPrompts.map(prompt => prompt._id);
-      
-      // 일괄 처리 중인 프롬프트 ID 목록 설정
+      // 유효한 ID만 필터링
+      const promptIds = pendingPrompts
+        .filter(prompt => prompt && prompt._id)
+        .map(prompt => prompt._id);
+
+      if (promptIds.length === 0) {
+        throw new Error('유효한 프롬프트 ID가 없습니다.');
+      }
+
       setBatchProcessingIds(promptIds);
-      
-      // 일괄 처리 API 호출
       const result = await teacherAPI.batchProcessPrompts(promptIds);
-      
-      // 성공 알림 표시
+
+      // 성공 시 상태 업데이트
       setNotification({
         show: true,
-        message: `${pendingPrompts.length}개의 프롬프트가 일괄 처리되었습니다. 이미지가 생성되는 동안 기다려주세요.`,
+        message: `${promptIds.length}개의 프롬프트가 일괄 처리되었습니다.`,
         type: 'success'
       });
-      
+
+      // 처리된 프롬프트 제거
+      setPendingPrompts(prev => prev.filter(p => !promptIds.includes(p._id)));
     } catch (err) {
       console.error('일괄 처리 중 오류 발생:', err);
-      
-      // 오류 메시지 처리
-      let errorMessage = '일괄 처리 중 오류가 발생했습니다.';
-      
-      if (err.message) {
-        errorMessage = err.message;
-      }
-      
-      // 오류 알림 표시
       setNotification({
         show: true,
-        message: errorMessage,
+        message: err.message || '일괄 처리 중 오류가 발생했습니다.',
         type: 'error'
       });
-      
-      // 일괄 처리 상태 초기화
+    } finally {
       setBatchProcessing(false);
       setBatchProcessingIds([]);
     }
