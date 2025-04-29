@@ -943,7 +943,8 @@ const Teacher = () => {
                           alt="생성된 이미지" 
                           onError={(e) => {
                             console.error('이미지 로드 실패:', e.target.src, e);
-                            e.target.src = 'https://via.placeholder.com/400x300?text=이미지+로드+실패'; // 대체 이미지 URL
+                            // 내부 데이터 URI 사용 (기본 회색 이미지)
+                            e.target.src = 'data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%22400%22%20height%3D%22300%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Crect%20width%3D%22400%22%20height%3D%22300%22%20fill%3D%22%23cccccc%22%2F%3E%3Ctext%20x%3D%22150%22%20y%3D%22150%22%20font-family%3D%22Arial%22%20font-size%3D%2216%22%20fill%3D%22%23333333%22%3E이미지%20로드%20실패%3C%2Ftext%3E%3C%2Fsvg%3E';
                           }}
                           onLoad={() => console.log('이미지 로드 성공:', image.path)}
                         />
