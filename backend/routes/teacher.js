@@ -1091,4 +1091,35 @@ router.post('/batch-process-prompts', authenticateTeacher, async (req, res) => {
           errorCount,
           details: processedDetails // 상세 결과 포함
         });
-        console.log(`
+        console.log(`[일괄 처리] 일괄 처리 완료 이벤트 전송: 총 ${promptsToProcess.length}개 처리 시도, 성공 ${successCount}개, 실패 ${errorCount}개`);
+      }
+
+    })();
+
+  } catch (error) {
+    console.error('일괄 프롬프트 처리 오류:', error);
+    res.status(500).json({
+      success: false,
+      message: '일괄 프롬프트 처리 중 오류가 발생했습니다'
+    });
+  }
+});
+
+// 일괄 처리 상태 조회 라우트
+router.get('/batch-status', authenticateTeacher, (req, res) => {
+  try {
+    const status = getBatchStatus();
+    res.json({
+      success: true,
+      status
+    });
+  } catch (error) {
+    console.error('일괄 처리 상태 조회 오류:', error);
+    res.status(500).json({
+      success: false,
+      message: '상태 조회 중 오류가 발생했습니다'
+    });
+  }
+});
+
+module.exports = router;
