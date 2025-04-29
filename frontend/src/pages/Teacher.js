@@ -271,14 +271,22 @@ const AlertMessage = styled.div`
 const formatDate = (dateString) => {
   if (!dateString) return '날짜 정보 없음';
   try {
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) {
-      throw new Error('유효하지 않은 날짜');
-    }
-    return date.toLocaleString('ko-KR');
+    // ISO 문자열로 변환 시도
+    const isoString = new Date(dateString).toISOString();
+    // 한국 시간으로 변환
+    const options = {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    };
+    return new Date(isoString).toLocaleString('ko-KR', options);
   } catch (err) {
     console.error('날짜 변환 오류:', err);
-    return '날짜 정보 없음';
+    // 원본 문자열 반환
+    return String(dateString);
   }
 };
 
@@ -738,6 +746,11 @@ const Teacher = () => {
       return;
     }
 
+    // 확인 메시지 추가
+    if (!window.confirm(`${pendingPrompts.length}개의 프롬프트를 일괄 승인하시겠습니까?`)) {
+      return;
+    }
+
     setBatchProcessing(true);
     try {
       // 유효한 ID만 필터링
@@ -750,17 +763,27 @@ const Teacher = () => {
       }
 
       setBatchProcessingIds(promptIds);
-      const result = await teacherAPI.batchProcessPrompts(promptIds);
+      
+      // API 호출 전 상태 저장
+      const previousPrompts = [...pendingPrompts];
+      
+      try {
+        const result = await teacherAPI.batchProcessPrompts(promptIds);
+        
+        // 성공 시 상태 업데이트
+        setNotification({
+          show: true,
+          message: `${promptIds.length}개의 프롬프트가 일괄 처리되었습니다.`,
+          type: 'success'
+        });
 
-      // 성공 시 상태 업데이트
-      setNotification({
-        show: true,
-        message: `${promptIds.length}개의 프롬프트가 일괄 처리되었습니다.`,
-        type: 'success'
-      });
-
-      // 처리된 프롬프트 제거
-      setPendingPrompts(prev => prev.filter(p => !promptIds.includes(p._id)));
+        // 처리된 프롬프트 제거
+        setPendingPrompts(prev => prev.filter(p => !promptIds.includes(p._id)));
+      } catch (apiError) {
+        // API 오류 시 상태 복구
+        setPendingPrompts(previousPrompts);
+        throw new Error(apiError.message || '서버 처리 중 오류가 발생했습니다.');
+      }
     } catch (err) {
       console.error('일괄 처리 중 오류 발생:', err);
       setNotification({
