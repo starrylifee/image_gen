@@ -66,26 +66,41 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 
 // 이미지 다운로드 및 저장 함수
 const downloadAndSaveImage = async (imageUrl, promptId) => {
+  const UPLOAD_DIR_LOCAL = path.join(__dirname, '..', 'uploads'); // 저장 디렉토리 경로 재확인
+  const filename = `${promptId}_${Date.now()}.png`;
+  const savePath = path.join(UPLOAD_DIR_LOCAL, filename);
+
+  console.log(`[downloadAndSaveImage] 저장 시도 경로: ${savePath}`); // 저장 경로 로그 추가
+
   try {
+    if (!fs.existsSync(UPLOAD_DIR_LOCAL)) {
+      console.log(`[downloadAndSaveImage] 업로드 디렉토리 없음, 생성 시도: ${UPLOAD_DIR_LOCAL}`);
+      fs.mkdirSync(UPLOAD_DIR_LOCAL, { recursive: true });
+      console.log(`[downloadAndSaveImage] 업로드 디렉토리 생성 완료: ${UPLOAD_DIR_LOCAL}`);
+    }
+
     const response = await axios({
       url: imageUrl,
       method: 'GET',
       responseType: 'stream'
     });
 
-    // 고유한 파일 이름 생성 (예: promptId_timestamp.png)
-    const filename = `${promptId}_${Date.now()}.png`;
-    const savePath = path.join(UPLOAD_DIR, filename);
     const writer = fs.createWriteStream(savePath);
 
     response.data.pipe(writer);
 
     return new Promise((resolve, reject) => {
-      writer.on('finish', () => resolve(`/uploads/${filename}`)); // 서버 내부 경로 반환
-      writer.on('error', reject);
+      writer.on('finish', () => {
+        console.log(`[downloadAndSaveImage] 파일 쓰기 완료: ${savePath}`); // 쓰기 완료 로그 추가
+        resolve(`/uploads/${filename}`); // 서버 내부 경로 반환
+      });
+      writer.on('error', (err) => {
+        console.error(`[downloadAndSaveImage] 파일 쓰기 오류: ${savePath}`, err); // 쓰기 오류 로그 추가
+        reject(err);
+      });
     });
   } catch (error) {
-    console.error('이미지 다운로드 및 저장 오류:', error);
+    console.error(`[downloadAndSaveImage] 이미지 다운로드 또는 저장 중 오류 발생 (경로: ${savePath}):`, error);
     throw new Error('이미지를 서버에 저장하는 중 오류 발생');
   }
 };
@@ -1076,36 +1091,4 @@ router.post('/batch-process-prompts', authenticateTeacher, async (req, res) => {
           errorCount,
           details: processedDetails // 상세 결과 포함
         });
-        console.log(`[일괄 처리] 완료 이벤트 전송: ${promptsToProcess.length}개 처리 결과 포함`);
-      }
-    })().catch(error => {
-      console.error('[일괄 처리] 비동기 처리 루프 중 예상치 못한 오류 발생:', error);
-      // 여기서도 오류 발생 시 관리자에게 알림 등의 추가 조치 가능
-    });
-  } catch (error) {
-    console.error('일괄 프롬프트 처리 라우트 오류 (동기):', error);
-    res.status(500).json({
-      success: false,
-      message: '일괄 처리 시작 중 오류가 발생했습니다'
-    });
-  }
-});
-
-// 일괄 처리 상태 조회 라우트
-router.get('/batch-status', authenticateTeacher, (req, res) => {
-  try {
-    const status = getBatchStatus();
-    res.json({
-      success: true,
-      status
-    });
-  } catch (error) {
-    console.error('일괄 처리 상태 조회 오류:', error);
-    res.status(500).json({
-      success: false,
-      message: '상태 조회 중 오류가 발생했습니다'
-    });
-  }
-});
-
-module.exports = router; 
+        console.log(`
