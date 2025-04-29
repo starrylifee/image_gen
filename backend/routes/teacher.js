@@ -6,6 +6,9 @@ const Prompt = require('../models/Prompt');
 const Image = require('../models/Image');
 const { generateImage, evaluateImageSafety, startBatchProcessing, getBatchStatus } = require('../services/imageService');
 const bcryptjs = require('bcryptjs');
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
 // 교사 인증 미들웨어
 const authenticateTeacher = async (req, res, next) => {
@@ -52,6 +55,38 @@ const authenticateTeacher = async (req, res, next) => {
       success: false, 
       message: '인증 처리 중 오류가 발생했습니다' 
     });
+  }
+};
+
+// 이미지 저장 경로 설정 (예: backend/uploads)
+const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+// 이미지 다운로드 및 저장 함수
+const downloadAndSaveImage = async (imageUrl, promptId) => {
+  try {
+    const response = await axios({
+      url: imageUrl,
+      method: 'GET',
+      responseType: 'stream'
+    });
+
+    // 고유한 파일 이름 생성 (예: promptId_timestamp.png)
+    const filename = `${promptId}_${Date.now()}.png`;
+    const savePath = path.join(UPLOAD_DIR, filename);
+    const writer = fs.createWriteStream(savePath);
+
+    response.data.pipe(writer);
+
+    return new Promise((resolve, reject) => {
+      writer.on('finish', () => resolve(`/uploads/${filename}`)); // 서버 내부 경로 반환
+      writer.on('error', reject);
+    });
+  } catch (error) {
+    console.error('이미지 다운로드 및 저장 오류:', error);
+    throw new Error('이미지를 서버에 저장하는 중 오류 발생');
   }
 };
 
@@ -212,25 +247,25 @@ router.post('/process-prompt', authenticateTeacher, async (req, res) => {
     const { promptId, status, rejectionReason } = req.body;
     
     if (!promptId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: '프롬프트 ID가 필요합니다' 
+      return res.status(400).json({
+        success: false,
+        message: '프롬프트 ID가 필요합니다'
       });
     }
     
-    const prompt = await Prompt.findById(promptId);
+    const prompt = await Prompt.findById(promptId).populate('student', '_id');
     
     if (!prompt) {
-      return res.status(404).json({ 
-        success: false, 
-        message: '프롬프트를 찾을 수 없습니다' 
+      return res.status(404).json({
+        success: false,
+        message: '프롬프트를 찾을 수 없습니다'
       });
     }
     
     if (prompt.status !== 'pending') {
-      return res.status(400).json({ 
-        success: false, 
-        message: '이미 처리된 프롬프트입니다' 
+      return res.status(400).json({
+        success: false,
+        message: '이미 처리된 프롬프트입니다'
       });
     }
     
@@ -281,17 +316,23 @@ router.post('/process-prompt', authenticateTeacher, async (req, res) => {
         console.log(`교사 ${teacher.name}(${teacher.username})의 크레딧이 1 차감되었습니다. 현재 잔액: ${teacher.credits}`);
         
         // 이미지 생성 서비스 호출 (URL 반환)
-        const imageUrl = await generateImage(prompt.content);
+        const tempImageUrl = await generateImage(prompt.content);
         
-        // 이미지 안전성 평가
-        const safetyLevel = await evaluateImageSafety(imageUrl);
+        // 생성된 이미지를 다운로드하여 서버에 저장
+        const localImagePath = await downloadAndSaveImage(tempImageUrl, prompt._id);
+        console.log(`이미지 로컬 저장 완료: ${localImagePath}`);
         
-        // 생성된 이미지 저장
+        // 이미지 안전성 평가 (임시 URL 또는 로컬 경로 사용 가능 여부 확인 필요)
+        // evaluateImageSafety 구현에 따라 인자 변경 필요할 수 있음
+        // 여기서는 임시 URL로 평가한다고 가정
+        const safetyLevel = await evaluateImageSafety(tempImageUrl);
+        
+        // 생성된 이미지 저장 (로컬 경로 사용)
         const newImage = new Image({
-          path: imageUrl,
-          isExternalUrl: true,  // 외부 URL임을 표시
+          path: localImagePath, // 로컬 경로 저장
+          isExternalUrl: false,  // 로컬 저장 플래그
           prompt: prompt._id,
-          student: prompt.student,
+          student: prompt.student._id, // populate된 student 객체에서 _id 사용
           status: 'pending',
           safetyLevel
         });
@@ -302,29 +343,28 @@ router.post('/process-prompt', authenticateTeacher, async (req, res) => {
         prompt.generatedImage = newImage._id;
         await prompt.save();
         
-        // 소켓을 통해 교사에게 새 이미지 알림
+        // 소켓을 통해 교사에게 새 이미지 알림 (로컬 경로 전달)
         if (req.io) {
-          const student = await User.findById(prompt.student);
-          
+          const student = await User.findById(prompt.student._id); // 학생 정보 다시 로드
           req.io.emit('imageGenerated', {
             _id: newImage._id,
-            path: imageUrl,  // URL 직접 전달
-            isExternalUrl: true,
+            path: localImagePath, // 로컬 경로 전달
+            isExternalUrl: false,
             prompt: {
-              _id: prompt._id,
-              content: prompt.content
-            },
-            student: {
-              _id: student._id,
-              name: student.name,
-              username: student.username
-            },
+               _id: prompt._id,
+               content: prompt.content
+             },
+             student: {
+               _id: student._id,
+               name: student.name,
+               username: student.username
+             },
             safetyLevel: newImage.safetyLevel,
             createdAt: newImage.createdAt
           });
         }
       } catch (error) {
-        console.error('이미지 생성 오류:', error);
+        console.error('이미지 생성/저장 오류:', error);
         
         // 이미지 생성에 실패한 경우에도 프롬프트 상태를 업데이트
         try {
@@ -333,46 +373,54 @@ router.post('/process-prompt', authenticateTeacher, async (req, res) => {
           await prompt.save();
           
           // 소켓을 통해 학생에게 오류 알림
-          if (req.io) {
+          if (req.io && prompt.student?._id) { // prompt.student가 있는지 확인
             // 특정 학생에게만 이벤트 전송
-            req.io.to(prompt.student.toString()).emit('promptProcessed', {
+            req.io.to(prompt.student._id.toString()).emit('promptProcessed', {
               promptId: prompt._id,
-              studentId: prompt.student,
+              studentId: prompt.student._id,
               status: 'processed',
               message: '이미지 생성 중 오류가 발생했습니다'
             });
             
-            console.log(`프롬프트 처리 완료 이벤트를 학생(${prompt.student})에게만 전송했습니다`);
+            console.log(`프롬프트 처리 완료(실패) 이벤트를 학생(${prompt.student._id})에게만 전송했습니다`);
           }
           
           console.log(`프롬프트 ID: ${prompt._id}의 상태를 'processed'로 변경했습니다. (이미지 생성 실패)`);
         } catch (updateError) {
           console.error('프롬프트 상태 업데이트 오류:', updateError);
         }
+        
+        // 실패 시에도 200 OK와 메시지 반환 (혹은 다른 상태 코드?)
+        // 클라이언트에서 이 메시지를 보고 적절히 처리해야 함
+        return res.json({
+           success: false, // 성공 아님을 명시
+           message: `프롬프트는 승인되었으나 이미지 생성 중 오류 발생: ${error.message}`,
+           promptStatus: 'processed' // 프롬프트 상태는 변경됨
+        });
       }
     } else if (status === 'rejected') {
       // 거부된 경우 소켓을 통해 학생에게 알림
-      if (req.io) {
+      if (req.io && prompt.student?._id) { // prompt.student가 있는지 확인
         // 특정 학생에게만 이벤트 전송
-        req.io.to(prompt.student.toString()).emit('promptRejected', {
+        req.io.to(prompt.student._id.toString()).emit('promptRejected', {
           promptId: prompt._id,
-          studentId: prompt.student,
+          studentId: prompt.student._id,
           rejectionReason: prompt.rejectionReason
         });
         
-        console.log(`프롬프트 거부 이벤트를 학생(${prompt.student})에게만 전송했습니다`);
+        console.log(`프롬프트 거부 이벤트를 학생(${prompt.student._id})에게만 전송했습니다`);
       }
     }
     
     res.json({
       success: true,
-      message: status === 'approved' ? '프롬프트가 승인되었습니다' : '프롬프트가 거부되었습니다'
+      message: status === 'approved' ? '프롬프트가 승인되고 이미지 생성이 시작되었습니다.' : '프롬프트가 거부되었습니다'
     });
   } catch (error) {
     console.error('프롬프트 처리 오류:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: '프롬프트 처리 중 오류가 발생했습니다' 
+    res.status(500).json({
+      success: false,
+      message: '프롬프트 처리 중 오류가 발생했습니다'
     });
   }
 });
@@ -383,25 +431,25 @@ router.post('/process-image', authenticateTeacher, async (req, res) => {
     const { imageId, status, rejectionReason } = req.body;
     
     if (!imageId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: '이미지 ID가 필요합니다' 
+      return res.status(400).json({
+        success: false,
+        message: '이미지 ID가 필요합니다'
       });
     }
     
-    const image = await Image.findById(imageId);
+    const image = await Image.findById(imageId).populate('student', '_id'); // student _id 포함
     
     if (!image) {
-      return res.status(404).json({ 
-        success: false, 
-        message: '이미지를 찾을 수 없습니다' 
+      return res.status(404).json({
+        success: false,
+        message: '이미지를 찾을 수 없습니다'
       });
     }
     
     if (image.status !== 'pending') {
-      return res.status(400).json({ 
-        success: false, 
-        message: '이미 처리된 이미지입니다' 
+      return res.status(400).json({
+        success: false,
+        message: '이미 처리된 이미지입니다'
       });
     }
     
@@ -431,31 +479,31 @@ router.post('/process-image', authenticateTeacher, async (req, res) => {
     }
     
     // 소켓을 통해 학생에게 알림
-    if (req.io) {
+    if (req.io && image.student?._id) { // image.student가 있는지 확인
       if (status === 'approved') {
         // 외부 URL인 경우 그대로 전달, 아닌 경우 /uploads/ 경로 추가
-        const imageUrl = image.isExternalUrl 
-          ? image.path 
-          : `/uploads/${image.path}`;
+        const imageUrl = image.isExternalUrl
+          ? image.path
+          : image.path; // 이미 /uploads/ 경로 포함됨
         
         // 특정 학생에게만 이벤트 전송 (room 기능 사용)
-        req.io.to(image.student.toString()).emit('imageApproved', {
+        req.io.to(image.student._id.toString()).emit('imageApproved', {
           imageId: image._id,
-          studentId: image.student,
+          studentId: image.student._id,
           imageUrl: imageUrl,
           promptId: image.prompt // 프롬프트 ID도 함께 전송
         });
         
-        console.log(`이미지 승인 이벤트를 학생(${image.student})에게만 전송했습니다`);
+        console.log(`이미지 승인 이벤트를 학생(${image.student._id})에게만 전송했습니다`);
       } else if (status === 'rejected') {
         // 특정 학생에게만 이벤트 전송
-        req.io.to(image.student.toString()).emit('imageRejected', {
+        req.io.to(image.student._id.toString()).emit('imageRejected', {
           imageId: image._id,
-          studentId: image.student,
+          studentId: image.student._id,
           rejectionReason: image.rejectionReason
         });
         
-        console.log(`이미지 거부 이벤트를 학생(${image.student})에게만 전송했습니다`);
+        console.log(`이미지 거부 이벤트를 학생(${image.student._id})에게만 전송했습니다`);
       }
     }
     
@@ -465,9 +513,9 @@ router.post('/process-image', authenticateTeacher, async (req, res) => {
     });
   } catch (error) {
     console.error('이미지 처리 오류:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: '이미지 처리 중 오류가 발생했습니다' 
+    res.status(500).json({
+      success: false,
+      message: '이미지 처리 중 오류가 발생했습니다'
     });
   }
 });
@@ -633,8 +681,12 @@ router.post('/reset-password', authenticateTeacher, async (req, res) => {
       });
     }
     
-    // 비밀번호 업데이트 (평문으로 저장)
-    student.password = newPassword;
+    // 비밀번호 해싱
+    const salt = await bcryptjs.genSalt(10);
+    const hashedPassword = await bcryptjs.hash(newPassword, salt);
+    
+    // 비밀번호 업데이트 (해시된 값으로)
+    student.password = hashedPassword;
     await student.save();
     
     console.log(`학생 ${student.name}(${student.username})의 비밀번호가 변경되었습니다`);
@@ -769,180 +821,271 @@ router.get('/credit-history', authenticateTeacher, async (req, res) => {
 // 일괄 프롬프트 처리 라우트
 router.post('/batch-process-prompts', authenticateTeacher, async (req, res) => {
   try {
+    const { promptIds: requestedPromptIds } = req.body; // 요청된 ID 목록
+
     // 교사 ID 가져오기
     const teacherId = req.user._id;
-    
-    // 해당 교사에게 배정된 학생 ID 목록 조회
+
+    // 해당 교사에게 배정된 학생 ID 목록 조회 (기존 로직과 동일)
     let studentIds = [];
-    
-    // 교사에게 직접 할당된 학생이 있는 경우
     if (req.user.metadata && req.user.metadata.studentIds && req.user.metadata.studentIds.length > 0) {
       studentIds = req.user.metadata.studentIds;
     } else {
-      // 해당 교사를 참조하는 모든 학생 조회
-      const students = await User.find({
-        role: 'student',
-        'metadata.teacherId': teacherId
-      });
-      
+      const students = await User.find({ role: 'student', 'metadata.teacherId': teacherId });
       studentIds = students.map(student => student._id);
     }
-    
-    // 승인할 프롬프트 목록 조회
+
+    // 처리할 프롬프트 목록 조회
     const query = { status: 'pending' };
-    
-    // 관리자가 아닌 경우 학생 필터링 적용
     if (req.user.role !== 'admin' && studentIds.length > 0) {
       query.student = { $in: studentIds };
     }
-    
-    // 요청에서 특정 프롬프트 ID들이 전달된 경우 해당 프롬프트만 처리
-    if (req.body.promptIds && Array.isArray(req.body.promptIds) && req.body.promptIds.length > 0) {
-      query._id = { $in: req.body.promptIds };
+    // 요청된 ID가 있으면 해당 ID들만 조회
+    if (requestedPromptIds && Array.isArray(requestedPromptIds) && requestedPromptIds.length > 0) {
+      query._id = { $in: requestedPromptIds };
+    } else {
+      // 요청된 ID가 없으면 처리할 프롬프트가 없는 것
+       return res.status(400).json({
+        success: false,
+        message: '처리할 프롬프트 ID 목록이 필요합니다'
+      });
     }
-    
+
     const pendingPrompts = await Prompt.find(query)
-      .populate('student', 'name username')
+      .populate('student', '_id name username') // student 정보 포함
       .sort({ createdAt: 1 });
-    
+
     if (pendingPrompts.length === 0) {
       return res.status(404).json({
         success: false,
-        message: '처리할 프롬프트가 없습니다'
+        message: '처리할 유효한 프롬프트가 없습니다 (이미 처리되었거나 권한 없음)'
       });
     }
-    
+
     console.log(`일괄 처리할 프롬프트 수: ${pendingPrompts.length}`);
-    
+
     // 교사 크레딧 확인
-    if (req.user.credits < pendingPrompts.length) {
+    const currentTeacher = await User.findById(teacherId); // 최신 크레딧 정보 로드
+    if (currentTeacher.credits < pendingPrompts.length) {
       return res.status(400).json({
         success: false,
-        message: `크레딧이 부족합니다. 필요: ${pendingPrompts.length}, 보유: ${req.user.credits}`,
-        credits: req.user.credits,
+        message: `크레딧이 부족합니다. 필요: ${pendingPrompts.length}, 보유: ${currentTeacher.credits}`,
+        credits: currentTeacher.credits,
         neededCredits: pendingPrompts.length
       });
     }
-    
-    // 일괄 처리 시작
-    startBatchProcessing(pendingPrompts.length);
-    
-    // 먼저 모든 프롬프트 상태를 'processing'으로 변경하여 중복 처리 방지
+
+    // 일괄 처리 시작 상태 (선택적)
+    // startBatchProcessing(pendingPrompts.length);
+
+    // 먼저 모든 프롬프트 상태를 'processing'으로 변경 시도 (오류 처리 강화)
     let updateErrors = [];
+    const promptsToProcess = []; // 실제로 처리할 프롬프트 목록
     for (const prompt of pendingPrompts) {
       try {
         prompt.status = 'processing'; // 일시적인 처리 중 상태
         await prompt.save();
+        promptsToProcess.push(prompt); // 성공한 프롬프트만 처리 목록에 추가
       } catch (updateError) {
         console.error(`[일괄 처리] 초기 상태 업데이트 오류 (${prompt._id}):`, updateError);
-        updateErrors.push({ promptId: prompt._id, error: updateError.message });
-        // 여기서 오류 발생 시 계속 진행할지, 아니면 전체 중단할지 결정 필요
-        // 일단은 오류 로깅 후 계속 진행하도록 함
+        updateErrors.push({ promptId: prompt._id.toString(), error: updateError.message });
       }
     }
-    
-    // 만약 초기 상태 업데이트에서 오류가 있었다면, 클라이언트에 알리고 중단할 수도 있음
-    // 예: if (updateErrors.length > 0) { ... return res.status(500) ... }
 
-    // 비동기 처리 시작 (응답은 먼저 보내고 백그라운드에서 처리)
+     // 초기 상태 업데이트 실패한 프롬프트가 있으면 알림 (처리 계속)
+     if (updateErrors.length > 0) {
+        console.warn(`[일괄 처리] ${updateErrors.length}개의 프롬프트 초기 상태 업데이트 실패`);
+        // 실패 알림 소켓 이벤트 (선택 사항)
+     }
+
+    // 실제로 처리할 프롬프트가 없는 경우 (모두 초기 업데이트 실패)
+    if (promptsToProcess.length === 0) {
+        return res.status(500).json({
+            success: false,
+            message: '모든 프롬프트의 초기 상태 업데이트에 실패하여 처리를 시작할 수 없습니다.',
+            errors: updateErrors
+        });
+    }
+
+
+    // 비동기 처리 시작 응답 (실제로 처리될 프롬프트 수 기준)
     res.status(202).json({
       success: true,
-      message: `${pendingPrompts.length}개의 프롬프트 일괄 처리가 시작되었습니다`,
+      message: `${promptsToProcess.length}개의 프롬프트 일괄 처리가 시작되었습니다`,
       batchId: Date.now().toString(),
-      totalPrompts: pendingPrompts.length
+      totalPromptsToProcess: promptsToProcess.length,
+      initialUpdateErrors: updateErrors // 초기 업데이트 오류 정보 전달
     });
-    
-    // 각 프롬프트에 대한 비동기 처리
+
+    // 각 프롬프트에 대한 비동기 처리 (promptsToProcess 사용)
     (async () => {
       let successCount = 0;
       let errorCount = 0;
-      
-      // 크레딧 차감
-      req.user.credits -= pendingPrompts.length;
-      await req.user.save();
-      
-      // 각 프롬프트 순차 처리
-      for (const prompt of pendingPrompts) {
-        try {
-          // 프롬프트 상태가 여전히 processing인지 확인 (중복 처리 방지)
-          const currentPrompt = await Prompt.findById(prompt._id);
-          if (currentPrompt.status !== 'processing') {
-            console.log(`[일괄 처리] 프롬프트(${prompt._id})가 이미 처리되었습니다. 상태: ${currentPrompt.status}`);
-            continue;
-          }
-          
-          // 프롬프트 상태 업데이트
-          prompt.status = 'approved';
-          prompt.reviewedBy = req.user._id;
-          prompt.reviewedAt = Date.now();
-          await prompt.save();
-          
-          // 소켓을 통해 승인 알림
-          if (req.io) {
-            // 특정 학생에게만 이벤트 전송
-            req.io.to(prompt.student._id.toString()).emit('promptApproved', {
-              promptId: prompt._id,
-              studentId: prompt.student._id
-            });
-            
-            console.log(`[일괄 처리] 프롬프트 승인 이벤트를 학생(${prompt.student._id})에게만 전송했습니다`);
-          }
-          
-          console.log(`[일괄 처리] 프롬프트 승인: ${prompt._id}`);
-          
-          // 이미지 생성
-          try {
-            const imageUrl = await generateImage(prompt.content, true); // true = 일괄 처리 작업
-            const safetyLevel = await evaluateImageSafety(imageUrl);
-            
-            // 이미지 정보 저장
-            const newImage = new Image({
-              path: imageUrl,
-              isExternalUrl: true,
-              prompt: prompt._id,
-              student: prompt.student._id,
-              status: 'pending',
-              safetyLevel
-            });
-            
-            await newImage.save();
-            
-            // 프롬프트와 이미지 연결
-            prompt.generatedImage = newImage._id;
-            await prompt.save();
-            
-            console.log(`[일괄 처리] 이미지 생성 완료: ${newImage._id} (프롬프트: ${prompt._id})`);
-            
-            successCount++;
-          } catch (imageError) {
-            console.error(`[일괄 처리] 이미지 생성 실패 (프롬프트: ${prompt._id}):`, imageError);
-            errorCount++;
-          }
-        } catch (promptError) {
-          console.error(`[일괄 처리] 프롬프트 처리 오류 (${prompt._id}):`, promptError);
-          errorCount++;
-        }
+      const processedDetails = []; // 각 프롬프트 처리 결과 저장
+
+      // 크레딧 차감 (실제 처리될 개수만큼)
+      try {
+          const teacherForCredit = await User.findById(teacherId);
+          teacherForCredit.credits -= promptsToProcess.length;
+          // 크레딧 사용 내역 추가
+          teacherForCredit.creditHistory.push({
+              amount: -promptsToProcess.length,
+              reason: `${promptsToProcess.length}개 프롬프트 일괄 처리`,
+              timestamp: new Date()
+          });
+          await teacherForCredit.save();
+          console.log(`[일괄 처리] 크레딧 ${promptsToProcess.length} 차감 완료. 현재 잔액: ${teacherForCredit.credits}`);
+      } catch (creditError) {
+          console.error('[일괄 처리] 크레딧 차감 오류:', creditError);
+          // 크레딧 차감 실패 시 처리를 중단할지 결정 필요
+          // 여기서는 일단 계속 진행
       }
-      
-      console.log(`[일괄 처리] 완료: 성공 ${successCount}개, 실패 ${errorCount}개`);
-      
+
+
+      // 각 프롬프트 순차 처리
+      for (const prompt of promptsToProcess) {
+          let status = 'failed'; // 최종 상태
+          let errorMessage = null;
+          let generatedImageId = null;
+
+          try {
+              // 프롬프트 상태가 여전히 processing인지 확인
+              const currentPrompt = await Prompt.findById(prompt._id);
+              if (!currentPrompt || currentPrompt.status !== 'processing') {
+                  console.log(`[일괄 처리] 프롬프트(${prompt._id})가 이미 다른 상태(${currentPrompt?.status})입니다. 건너니다.`);
+                  errorCount++;
+                  errorMessage = '이미 다른 상태로 변경됨';
+                  processedDetails.push({ promptId: prompt._id.toString(), status, error: errorMessage });
+                  continue; // 다음 프롬프트로
+              }
+
+              // 프롬프트 상태 업데이트 (승인)
+              currentPrompt.status = 'approved';
+              currentPrompt.reviewedBy = req.user._id;
+              currentPrompt.reviewedAt = Date.now();
+              await currentPrompt.save();
+
+              // 소켓 승인 알림 (기존 로직과 동일)
+              if (req.io && currentPrompt.student?._id) {
+                 req.io.to(currentPrompt.student._id.toString()).emit('promptApproved', {
+                   promptId: currentPrompt._id,
+                   studentId: currentPrompt.student._id
+                 });
+                 console.log(`[일괄 처리] 프롬프트 승인 이벤트 전송: ${currentPrompt._id}`);
+              }
+
+              // 이미지 생성
+              try {
+                  const tempImageUrl = await generateImage(currentPrompt.content, true); // true = 일괄 처리 작업
+
+                  // 이미지 다운로드 및 로컬 저장
+                  const localImagePath = await downloadAndSaveImage(tempImageUrl, currentPrompt._id);
+                  console.log(`[일괄 처리] 이미지 로컬 저장 완료: ${localImagePath} (프롬프트: ${currentPrompt._id})`);
+
+                  const safetyLevel = await evaluateImageSafety(tempImageUrl); // 임시 URL로 평가 가정
+
+                  // 이미지 정보 저장
+                  const newImage = new Image({
+                      path: localImagePath,
+                      isExternalUrl: false,
+                      prompt: currentPrompt._id,
+                      student: currentPrompt.student._id,
+                      status: 'pending', // 이미지는 승인 대기 상태로 생성
+                      safetyLevel
+                  });
+                  await newImage.save();
+                  generatedImageId = newImage._id.toString();
+
+                  // 프롬프트와 이미지 연결 및 상태 변경 ('processed')
+                  currentPrompt.generatedImage = newImage._id;
+                  currentPrompt.status = 'processed'; // 이미지 생성 성공 시 processed
+                  await currentPrompt.save();
+
+                  console.log(`[일괄 처리] 이미지 생성 완료: ${newImage._id} (프롬프트: ${currentPrompt._id}), 상태: processed`);
+
+                  // 새 이미지 생성 소켓 이벤트 (기존 로직과 동일)
+                  if (req.io) {
+                      const student = await User.findById(currentPrompt.student._id);
+                      if (student) {
+                         req.io.emit('imageGenerated', {
+                             _id: newImage._id,
+                             path: localImagePath,
+                             isExternalUrl: false,
+                             prompt: { _id: currentPrompt._id, content: currentPrompt.content },
+                             student: { _id: student._id, name: student.name, username: student.username },
+                             safetyLevel: newImage.safetyLevel,
+                             createdAt: newImage.createdAt
+                         });
+                         console.log(`[일괄 처리] 새 이미지 생성 이벤트 전송: ${newImage._id}`);
+                      }
+                  }
+
+                  status = 'success';
+                  successCount++;
+              } catch (imageError) {
+                  console.error(`[일괄 처리] 이미지 생성/저장 실패 (프롬프트: ${prompt._id}):`, imageError);
+                  errorMessage = imageError.message || '이미지 생성/저장 실패';
+                  errorCount++;
+
+                  // 이미지 생성 실패 시 프롬프트 상태를 'processed'로 변경 시도
+                  try {
+                      currentPrompt.status = 'processed'; // 이미지 생성 실패해도 processed
+                      await currentPrompt.save();
+                      console.log(`[일괄 처리] 이미지 생성 실패로 프롬프트(${prompt._id}) 상태를 'processed'로 변경`);
+                      if (req.io && currentPrompt.student?._id) {
+                          req.io.to(currentPrompt.student._id.toString()).emit('promptProcessed', {
+                              promptId: currentPrompt._id,
+                              studentId: currentPrompt.student._id,
+                              status: 'processed',
+                              message: '이미지 생성 중 오류가 발생했습니다'
+                          });
+                      }
+                  } catch (statusUpdateError) {
+                      console.error(`[일괄 처리] 실패 후 프롬프트(${prompt._id}) 상태 업데이트 오류:`, statusUpdateError);
+                      errorMessage += ` (상태 업데이트 실패: ${statusUpdateError.message})`;
+                  }
+              } // 이미지 생성 try-catch 끝
+
+          } catch (promptError) {
+              console.error(`[일괄 처리] 프롬프트 처리 오류 (${prompt._id}):`, promptError);
+              errorMessage = promptError.message || '프롬프트 처리 오류';
+              errorCount++;
+              // 프롬프트 처리 자체 오류 시 상태 복구 시도 (선택 사항)
+              try {
+                  const recoveryPrompt = await Prompt.findById(prompt._id);
+                  if (recoveryPrompt && recoveryPrompt.status === 'processing') {
+                      recoveryPrompt.status = 'pending'; // 다시 pending으로
+                      await recoveryPrompt.save();
+                  }
+              } catch (recoveryError) { /* 무시 */ }
+          } // 프롬프트 처리 try-catch 끝
+
+          processedDetails.push({ promptId: prompt._id.toString(), status, imageId: generatedImageId, error: errorMessage });
+
+      } // for 루프 끝
+
+      console.log(`[일괄 처리] 비동기 작업 완료: 총 ${promptsToProcess.length}개 처리 시도, 성공 ${successCount}개, 실패 ${errorCount}개`);
+
       // 완료 이벤트 전송
       if (req.io) {
         req.io.emit('batchProcessingCompleted', {
           teacherId: req.user._id,
-          totalProcessed: pendingPrompts.length,
+          totalProcessed: promptsToProcess.length,
           successCount,
-          errorCount
+          errorCount,
+          details: processedDetails // 상세 결과 포함
         });
+        console.log(`[일괄 처리] 완료 이벤트 전송: ${promptsToProcess.length}개 처리 결과 포함`);
       }
     })().catch(error => {
-      console.error('[일괄 처리] 비동기 처리 중 오류 발생:', error);
+      console.error('[일괄 처리] 비동기 처리 루프 중 예상치 못한 오류 발생:', error);
+      // 여기서도 오류 발생 시 관리자에게 알림 등의 추가 조치 가능
     });
   } catch (error) {
-    console.error('일괄 프롬프트 처리 오류:', error);
+    console.error('일괄 프롬프트 처리 라우트 오류 (동기):', error);
     res.status(500).json({
       success: false,
-      message: '일괄 처리 중 오류가 발생했습니다'
+      message: '일괄 처리 시작 중 오류가 발생했습니다'
     });
   }
 });
