@@ -932,7 +932,7 @@ const Teacher = () => {
                         ? image.path 
                         : image.path.startsWith('http') 
                           ? image.path 
-                          : `${process.env.REACT_APP_API_URL || 'http://localhost:8080'}${image.path}`;
+                          : `https://port-0-imagegen-backend-7xwyjq992lliylnmq.sel4.cloudtype.app${image.path}`;
                       
                       // 로그 추가: 계산된 이미지 URL 확인
                       console.log(`[Teacher.js] Calculated image URL for ID ${image._id}:`, imageUrl);
