@@ -14,7 +14,12 @@ class SocketService {
       transports: ['websocket'],
       auth: {
         token: localStorage.getItem('token')
-      }
+      },
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000
     });
 
     this.socket.on('connect', () => {
@@ -37,6 +42,19 @@ class SocketService {
     this.socket.on('connect_error', (error) => {
       console.error('소켓 연결 오류:', error);
       this.isConnected = false;
+    });
+
+    this.socket.on('reconnect', (attemptNumber) => {
+      console.log('소켓 재연결 성공! 시도 횟수:', attemptNumber);
+      this.isConnected = true;
+    });
+
+    this.socket.on('reconnect_error', (error) => {
+      console.error('소켓 재연결 오류:', error);
+    });
+
+    this.socket.on('reconnect_failed', () => {
+      console.error('소켓 재연결 실패!');
     });
 
     return this.socket;
