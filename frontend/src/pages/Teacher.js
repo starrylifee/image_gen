@@ -271,27 +271,30 @@ const AlertMessage = styled.div`
 const formatDate = (dateString) => {
   if (!dateString) return '날짜 정보 없음';
   
+  // 문자열이 아닌 경우 문자열로 변환
+  const dateStr = String(dateString);
+  
   try {
-    // 문자열이 ISO 형식인지 확인
-    if (typeof dateString === 'string' && dateString.includes('T')) {
-      const date = new Date(dateString);
-      if (!isNaN(date.getTime())) {
-        return date.toLocaleString('ko-KR', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false
-        });
-      }
+    // 날짜 객체 생성 시도
+    const dateObj = new Date(dateStr);
+    
+    // 유효한 날짜인지 확인
+    if (isNaN(dateObj.getTime())) {
+      return dateStr;
     }
     
-    // 일반 문자열인 경우 그대로 반환
-    return String(dateString);
+    // 년, 월, 일, 시, 분 추출
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const hours = String(dateObj.getHours()).padStart(2, '0');
+    const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+    
+    // 한국식 날짜 형식으로 반환
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
   } catch (err) {
     console.error('날짜 변환 오류:', err);
-    return String(dateString);
+    return dateStr;
   }
 };
 
