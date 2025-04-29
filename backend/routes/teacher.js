@@ -291,139 +291,116 @@ router.post('/process-prompt', authenticateTeacher, async (req, res) => {
       });
     }
     
-    // 상태 확인 및 설정
+    // 프롬프트 상태 업데이트
     prompt.status = status;
-    prompt.reviewedBy = req.user._id;
-    prompt.reviewedAt = Date.now();
+    prompt.processedAt = new Date();
+    prompt.processedBy = req.user._id;
     
-    if (status === 'rejected' && rejectionReason) {
+    if (status === 'rejected') {
       prompt.rejectionReason = rejectionReason;
-    }
-    
-    await prompt.save();
-    
-    // 프롬프트가 승인된 경우 이미지 생성 시작
-    if (status === 'approved') {
-      try {
-        // 교사의 크레딧 확인
-        const teacher = await User.findById(req.user._id);
-        
-        // 크레딧이 부족한 경우
-        if (teacher.credits < 1) {
-          return res.status(400).json({
-            success: false,
-            message: '크레딧이 부족하여 이미지를 생성할 수 없습니다',
-            credits: teacher.credits,
-            neededCredits: 1
-          });
-        }
-        
-        // 크레딧 차감
-        teacher.credits -= 1;
-        teacher.creditHistory.push({
-          amount: -1,
-          reason: `이미지 생성: ${prompt.content.substring(0, 30)}${prompt.content.length > 30 ? '...' : ''}`,
-          timestamp: new Date()
-        });
-        
-        await teacher.save();
-        
-        console.log(`교사 ${teacher.name}(${teacher.username})의 크레딧이 1 차감되었습니다. 현재 잔액: ${teacher.credits}`);
-        
-        // 이미지 생성 서비스 호출 (URL 반환)
-        const tempImageUrl = await generateImage(prompt.content);
-        
-        // 생성된 이미지를 다운로드하여 서버에 저장
-        const localImagePath = await downloadAndSaveImage(tempImageUrl, prompt._id);
-        console.log(`이미지 로컬 저장 완료: ${localImagePath}`);
-        
-        // 이미지 안전성 평가 (임시 URL 또는 로컬 경로 사용 가능 여부 확인 필요)
-        // evaluateImageSafety 구현에 따라 인자 변경 필요할 수 있음
-        // 여기서는 임시 URL로 평가한다고 가정
-        const safetyLevel = await evaluateImageSafety(tempImageUrl);
-        
-        // 생성된 이미지 저장 (로컬 경로 사용)
-        const newImage = new Image({
-          path: localImagePath, // 로컬 경로 저장
-          isExternalUrl: false,  // 로컬 저장 플래그
-          prompt: prompt._id,
-          student: prompt.student._id, // populate된 student 객체에서 _id 사용
-          status: 'pending',
-          safetyLevel
-        });
-        
-        await newImage.save();
-        
-        // 프롬프트 상태 업데이트
-        prompt.generatedImage = newImage._id;
-        await prompt.save();
-        
-        // 소켓을 통해 교사에게 새 이미지 알림 (로컬 경로 전달)
-        if (req.io) {
-          const student = await User.findById(prompt.student._id); // 학생 정보 다시 로드
-          req.io.emit('imageGenerated', {
-            _id: newImage._id,
-            path: localImagePath, // 로컬 경로 전달
-            isExternalUrl: false,
-            prompt: {
-               _id: prompt._id,
-               content: prompt.content
-             },
-             student: {
-               _id: student._id,
-               name: student.name,
-               username: student.username
-             },
-            safetyLevel: newImage.safetyLevel,
-            createdAt: newImage.createdAt
-          });
-        }
-      } catch (error) {
-        console.error('이미지 생성/저장 오류:', error);
-        
-        // 이미지 생성에 실패한 경우에도 프롬프트 상태를 업데이트
-        try {
-          // 프롬프트 상태를 'processed'로 변경
-          prompt.status = 'processed';
-          await prompt.save();
-          
-          // 소켓을 통해 학생에게 오류 알림
-          if (req.io && prompt.student?._id) { // prompt.student가 있는지 확인
-            // 특정 학생에게만 이벤트 전송
-            req.io.to(prompt.student._id.toString()).emit('promptProcessed', {
-              promptId: prompt._id,
-              studentId: prompt.student._id,
-              status: 'processed',
-              message: '이미지 생성 중 오류가 발생했습니다'
-            });
-            
-            console.log(`프롬프트 처리 완료(실패) 이벤트를 학생(${prompt.student._id})에게만 전송했습니다`);
-          }
-          
-          console.log(`프롬프트 ID: ${prompt._id}의 상태를 'processed'로 변경했습니다. (이미지 생성 실패)`);
-        } catch (updateError) {
-          console.error('프롬프트 상태 업데이트 오류:', updateError);
-        }
-        
-        // 실패 시에도 200 OK와 메시지 반환 (혹은 다른 상태 코드?)
-        // 클라이언트에서 이 메시지를 보고 적절히 처리해야 함
-        return res.json({
-           success: false, // 성공 아님을 명시
-           message: `프롬프트는 승인되었으나 이미지 생성 중 오류 발생: ${error.message}`,
-           promptStatus: 'processed' // 프롬프트 상태는 변경됨
+      await prompt.save();
+      
+      // 이벤트 알림 전송 (소켓)
+      if (req.io) {
+        req.io.to(prompt.student.toString()).emit('promptRejected', {
+          promptId: prompt._id,
+          studentId: prompt.student,
+          rejectionReason
         });
       }
-    } else if (status === 'rejected') {
-      // 거부된 경우 소켓을 통해 학생에게 알림
-      if (req.io && prompt.student?._id) { // prompt.student가 있는지 확인
-        // 특정 학생에게만 이벤트 전송
-        req.io.to(prompt.student._id.toString()).emit('promptRejected', {
-          promptId: prompt._id,
-          studentId: prompt.student._id,
-          rejectionReason: prompt.rejectionReason
+    } else if (status === 'approved') {
+      await prompt.save();
+      
+      try {
+        console.log(`====== 이미지 생성 프로세스 시작 (프롬프트 ID: ${prompt._id}) ======`);
+        
+        // 학생 크레딧 차감
+        const student = await User.findById(prompt.student);
+        if (!student) {
+          throw new Error('학생 정보를 찾을 수 없습니다');
+        }
+        
+        // 이미지 생성 요청
+        console.log(`DALL-E 이미지 생성 요청 전송 중 (프롬프트: "${prompt.content.substring(0, 30)}...")`);
+        console.log('크레딧 차감 전 학생 정보:', {
+          id: student._id,
+          name: student.name,
+          credits: student.credits
         });
         
-        console.log(`프롬프트 거부 이벤트를 학생(${prompt.student._id})에게만 전송했습니다`);
+        const imageUrl = await generateImage(prompt.content);
+        console.log(`이미지 생성 완료, 반환된 URL: ${imageUrl.substring(0, 50)}...`);
+        
+        // URL이 외부 URL인지 확인
+        const isExternalUrl = imageUrl.startsWith('http') && !imageUrl.includes('placeholder');
+        console.log(`이미지 타입: ${isExternalUrl ? '외부 URL (DALL-E 직접 링크)' : '로컬 다운로드 또는 fallback 이미지'}`);
+        
+        // 이미지 메타데이터 설정
+        let imagePath = imageUrl;
+        
+        // 외부 URL이면 다운로드하여 저장하거나 또는 외부 URL 그대로 사용
+        if (isExternalUrl && process.env.SAVE_IMAGES_LOCALLY === 'true') {
+          try {
+            console.log('외부 이미지를 로컬에 다운로드 시도 중...');
+            imagePath = await downloadAndSaveImage(imageUrl, prompt._id);
+            console.log(`이미지 다운로드 완료, 로컬 경로: ${imagePath}`);
+          } catch (downloadError) {
+            console.error('이미지 다운로드 실패, 원본 URL 사용:', downloadError);
+            // 다운로드 실패시 원본 URL 사용
+          }
+        }
+        
+        // 이미지 안전성 평가
+        const safetyLevel = await evaluateImageSafety(imageUrl);
+        console.log(`이미지 안전성 평가 결과: ${safetyLevel}`);
+        
+        // 새 이미지 데이터 생성
+        const image = new Image({
+          prompt: prompt._id,
+          student: prompt.student,
+          teacher: req.user._id,
+          path: imagePath,
+          isExternalUrl: isExternalUrl && imagePath === imageUrl,
+          safetyLevel,
+          metadata: {
+            originalUrl: isExternalUrl ? imageUrl : null,
+            model: 'dall-e-3',
+            size: '1024x1024'
+          }
+        });
+        
+        await image.save();
+        console.log(`이미지 데이터베이스 저장 완료 (ID: ${image._id})`);
+        console.log(`저장된 이미지 경로: ${image.path}`);
+        console.log(`isExternalUrl 플래그: ${image.isExternalUrl}`);
+        
+        // 프롬프트 상태 업데이트
+        prompt.status = 'processed';
+        prompt.image = image._id;
+        await prompt.save();
+        
+        // 이벤트 알림 전송 (소켓)
+        if (req.io) {
+          const imageData = {
+            imageId: image._id,
+            promptId: prompt._id,
+            studentId: prompt.student,
+            imageUrl: image.isExternalUrl ? image.path : `${req.protocol}://${req.get('host')}${image.path}`,
+            safetyLevel,
+            message: '이미지가 생성되었습니다!'
+          };
+          
+          console.log(`소켓 이벤트 전송 데이터:`, JSON.stringify(imageData).substring(0, 200) + '...');
+          req.io.to(prompt.student.toString()).emit('imageGenerated', imageData);
+        }
+        
+        console.log(`====== 이미지 생성 프로세스 완료 (프롬프트 ID: ${prompt._id}) ======`);
+      } catch (imageError) {
+        console.error('이미지 생성 중 오류:', imageError);
+        res.status(500).json({
+          success: false,
+          message: '이미지 생성 중 오류가 발생했습니다'
+        });
       }
     }
     

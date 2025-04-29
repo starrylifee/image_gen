@@ -216,7 +216,9 @@ const processQueue = async () => {
  */
 const generateRealImage = async (prompt) => {
   try {
-    console.log('OpenAI DALL-E API를 통한 이미지 생성 시작');
+    console.log('====== DALL-E 이미지 생성 프로세스 시작 ======');
+    console.log(`프롬프트: "${prompt.substring(0, 50)}${prompt.length > 50 ? '...' : ''}"`);
+    console.log(`API 키 확인: ${process.env.OPENAI_API_KEY ? '설정됨 ('+process.env.OPENAI_API_KEY.substring(0, 5)+'...)' : '설정되지 않음'}`);
     
     // OpenAI API 호출 - URL 형식으로 요청
     const response = await openai.images.generate({
@@ -229,11 +231,20 @@ const generateRealImage = async (prompt) => {
     
     // 응답에서 이미지 URL 추출
     const imageUrl = response.data[0].url;
-    console.log(`DALL-E 이미지 URL 생성 완료: ${imageUrl}`);
+    console.log(`DALL-E 이미지 생성 성공!`);
+    console.log(`생성된 원본 URL: ${imageUrl}`);
+    console.log(`응답 전체 데이터:`, JSON.stringify(response.data[0]).substring(0, 200) + '...');
+    console.log('====== DALL-E 이미지 생성 프로세스 완료 ======');
     
     return imageUrl;
   } catch (error) {
-    console.error('OpenAI 이미지 생성 오류:', error.message);
+    console.error('====== DALL-E 이미지 생성 오류 ======');
+    console.error(`오류 메시지: ${error.message}`);
+    console.error(`오류 상태 코드: ${error.status || 'N/A'}`);
+    if (error.response) {
+      console.error(`API 응답: ${JSON.stringify(error.response).substring(0, 200)}...`);
+    }
+    console.error('오류 스택:', error.stack);
     console.log('API 오류로 인해 더미 이미지로 대체합니다.');
     return await generateDummyImageUrl(prompt + ' (API 오류로 인한 대체 이미지)');
   }
