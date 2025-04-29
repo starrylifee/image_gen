@@ -896,6 +896,9 @@ const Teacher = () => {
         )
       );
     } else if (activeTab === 'images') {
+      // 로그 추가: pendingImages 상태 확인
+      console.log('[Teacher.js] Rendering images tab. pendingImages:', pendingImages);
+
       return (
         pendingImages.length === 0 ? (
           <EmptyMessage>검토할 이미지가 없습니다.</EmptyMessage>
@@ -921,21 +924,33 @@ const Teacher = () => {
                 
                 <ImageContainer>
                   {image.path ? (
-                    <Image 
-                      src={image.isExternalUrl 
-                        ? image.path // 외부 URL은 그대로 사용
+                    (() => { // 즉시 실행 함수로 감싸서 로그 추가
+                      // 로그 추가: 각 이미지 데이터 확인
+                      console.log(`[Teacher.js] Rendering image: ID=${image._id}, Path=${image.path}, IsExternal=${image.isExternalUrl}`);
+                      
+                      const imageUrl = image.isExternalUrl 
+                        ? image.path 
                         : image.path.startsWith('http') 
-                          ? image.path // 이미 http로 시작하는 경우 (예: 다른 외부 저장소)
-                          : `${process.env.REACT_APP_API_URL || 'http://localhost:8080'}${image.path}`} // 환경 변수 사용 및 기본 포트 8080으로 수정
-                      alt="생성된 이미지" 
-                      onError={(e) => {
-                        console.error('이미지 로드 실패:', e.target.src, e);
-                        e.target.src = 'https://via.placeholder.com/400x300?text=이미지+로드+실패'; // 대체 이미지 URL
-                      }}
-                      onLoad={() => console.log('이미지 로드 성공:', image.path)}
-                    />
+                          ? image.path 
+                          : `${process.env.REACT_APP_API_URL || 'http://localhost:8080'}${image.path}`;
+                      
+                      // 로그 추가: 계산된 이미지 URL 확인
+                      console.log(`[Teacher.js] Calculated image URL for ID ${image._id}:`, imageUrl);
+
+                      return (
+                        <Image 
+                          src={imageUrl}
+                          alt="생성된 이미지" 
+                          onError={(e) => {
+                            console.error('이미지 로드 실패:', e.target.src, e);
+                            e.target.src = 'https://via.placeholder.com/400x300?text=이미지+로드+실패'; // 대체 이미지 URL
+                          }}
+                          onLoad={() => console.log('이미지 로드 성공:', image.path)}
+                        />
+                      );
+                    })()
                   ) : (
-                    <p>이미지를 불러올 수 없습니다</p>
+                    <p>이미지를 불러올 수 없습니다 (image.path 없음)</p> // 경로 없을 때 메시지 추가
                   )}
                 </ImageContainer>
                 
