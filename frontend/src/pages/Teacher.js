@@ -356,51 +356,52 @@ const Teacher = () => {
     fetchItems();
   }, [activeTab]);
 
-  // 소켓 연결 및 이벤트 리스너 설정
-  const socket = socketService.connect();
-  
-  console.log('교사 화면: 소켓 연결 설정 완료');
-  
-  const cleanup = setupSocketListeners(socket, {
-    onNewPromptSubmitted: (data) => {
-      // 새 프롬프트가 제출되면 목록 새로고침
-      console.log('새 프롬프트 제출 이벤트 수신:', data);
-      if (activeTab === 'prompts') {
-        console.log('프롬프트 목록 새로고침');
+  // 소켓 연결 및 이벤트 리스너 설정을 위한 useEffect 추가
+  useEffect(() => {
+    const socket = socketService.connect();
+    console.log('교사 화면: 소켓 연결 설정 완료');
+
+    const cleanupListeners = setupSocketListeners(socket, {
+      onNewPromptSubmitted: (data) => {
+        // 새 프롬프트가 제출되면 목록 새로고침
+        console.log('새 프롬프트 제출 이벤트 수신:', data);
+        // 현재 프롬프트 탭일 때만 fetchItems 호출 (중복 호출 방지)
+        // setActiveTab이 fetchItems를 트리거하므로 여기서는 직접 호출하지 않거나,
+        // fetchItems 내부에서 activeTab 상태를 참조하도록 합니다.
+        // 여기서는 fetchItems 내부 로직을 신뢰하고 호출합니다.
         fetchItems();
-      }
-    },
-    onImageGenerated: (data) => {
-      // 새 이미지가 생성되면 목록 새로고침
-      console.log('이미지 생성 이벤트 수신:', data);
-      if (activeTab === 'images') {
-        console.log('이미지 목록 새로고침');
+      },
+      onImageGenerated: (data) => {
+        // 새 이미지가 생성되면 목록 새로고침
+        console.log('이미지 생성 이벤트 수신:', data);
+        // 현재 이미지 탭일 때만 fetchItems 호출
+        // fetchItems 내부에서 activeTab 상태를 참조하므로 호출합니다.
         fetchItems();
+      },
+      onBatchProcessingCompleted: (data) => {
+        // 일괄 처리가 완료되면 목록 새로고침
+        console.log('일괄 처리 완료 이벤트 수신:', data);
+        setBatchProcessing(false);
+        setBatchProcessingIds([]);
+        fetchItems(); // 완료 시점에는 항상 새로고침
+      },
+      onPromptStatusChange: (data) => {
+        // 프롬프트 상태가 변경되면 목록에서 제거 (fetchItems 대신 상태 직접 업데이트)
+        console.log('프롬프트 상태 변경 이벤트 수신:', data);
+        if ((data.status === 'approved' || data.status === 'rejected')) {
+          setPendingPrompts(prev => prev.filter(p => p._id !== data.promptId));
+          setBatchProcessingIds(prev => prev.filter(id => id !== data.promptId));
+        }
       }
-    },
-    onBatchProcessingCompleted: (data) => {
-      // 일괄 처리가 완료되면 목록 새로고침
-      console.log('일괄 처리 완료 이벤트 수신:', data);
-      setBatchProcessing(false);
-      setBatchProcessingIds([]);
-      // 일괄 처리 완료 시점에만 목록 새로고침
-      fetchItems();
-    },
-    onPromptStatusChange: (data) => {
-      // 프롬프트 상태가 변경되면 목록에서 제거
-      console.log('프롬프트 상태 변경 이벤트 수신:', data);
-      if ((data.status === 'approved' || data.status === 'rejected') && activeTab === 'prompts') {
-        setPendingPrompts(prev => prev.filter(p => p._id !== data.promptId));
-        // 일괄 처리 목록에서도 제거
-        setBatchProcessingIds(prev => prev.filter(id => id !== data.promptId));
-      }
-    }
-  });
-  
-  return () => {
-    cleanup && cleanup();
-    socketService.disconnect();
-  };
+    });
+
+    // useEffect의 cleanup 함수 반환
+    return () => {
+      console.log('교사 화면: 소켓 연결 해제 및 리스너 정리');
+      cleanupListeners && cleanupListeners(); // setupSocketListeners가 반환한 cleanup 함수 호출
+      socketService.disconnect();
+    };
+  }, []); // 빈 배열: 컴포넌트 마운트 시 한 번만 실행
 
   // 탭 변경 핸들러
   const handleTabChange = (tab) => {
@@ -1147,6 +1148,9 @@ const Teacher = () => {
       );
     }
   };
+
+  // 최종 JSX 반환 전 로딩 상태 확인 로그 추가
+  console.log('Rendering with loading:', loading, 'activeTab:', activeTab);
 
   return (
     <PageContainer>
