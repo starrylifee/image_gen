@@ -221,16 +221,16 @@ router.get('/pending-images', authenticateTeacher, async (req, res) => {
           displayUrl: imageObj.path // 표시용 URL
         };
       } else {
-        // 내부 파일인 경우 /uploads 경로 추가
-        const imagePath = imageObj.path.startsWith('/') 
-          ? `/uploads${imageObj.path}` 
-          : `/uploads/${imageObj.path}`;
+        // 내부 파일인 경우 DB에 저장된 경로 그대로 사용
+        // const imagePath = imageObj.path.startsWith('/') 
+        //  ? `/uploads${imageObj.path}` 
+        //  : `/uploads/${imageObj.path}`;
         
         return {
           ...imageObj,
           isExternalUrl: false,
-          path: imagePath,
-          originalPath: imageObj.path // 디버깅용으로 원본 경로도 포함
+          path: imageObj.path, // DB 경로 그대로 사용
+          originalPath: imageObj.path // 디버깅용 원본 경로 유지
         };
       }
     });
