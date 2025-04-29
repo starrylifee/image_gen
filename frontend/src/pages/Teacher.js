@@ -329,9 +329,11 @@ const Teacher = () => {
 
   // 프롬프트 및 이미지 조회
   const fetchItems = async () => {
+    console.log('fetchItems 실행됨, activeTab:', activeTab);
     setLoading(true);
     try {
       if (activeTab === 'prompts') {
+        console.log('teacherAPI.getPendingPrompts 호출 시도');
         const data = await teacherAPI.getPendingPrompts();
         console.log('교사 화면 - 대기 중인 프롬프트 응답:', data);
         
@@ -341,6 +343,7 @@ const Teacher = () => {
         
         setPendingPrompts(Array.isArray(prompts) ? prompts : []);
       } else {
+        console.log('teacherAPI.getPendingImages 호출 시도');
         const data = await teacherAPI.getPendingImages();
         console.log('교사 화면 - 대기 중인 이미지 응답:', data);
         
