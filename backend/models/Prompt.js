@@ -12,7 +12,7 @@ const promptSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'approved', 'rejected', 'processed'],
+    enum: ['pending', 'approved', 'rejected', 'processed', 'processing'],
     default: 'pending'
   },
   reviewedBy: {
