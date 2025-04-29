@@ -968,110 +968,104 @@ router.post('/batch-process-prompts', authenticateTeacher, async (req, res) => {
               }
 
               // 이미지 생성
-              try {
-                  const tempImageUrl = await generateImage(currentPrompt.content, true); // true = 일괄 처리 작업
+              const dallEImageUrl = await generateImage(currentPrompt.content, true); // DALL-E 외부 URL
+              const safetyLevel = await evaluateImageSafety(dallEImageUrl);
 
-                  // 이미지 다운로드 및 로컬 저장
-                  const localImagePath = await downloadAndSaveImage(tempImageUrl, currentPrompt._id);
-                  console.log(`[일괄 처리] 이미지 로컬 저장 완료: ${localImagePath} (프롬프트: ${currentPrompt._id})`);
+              // 이미지 정보 저장 (외부 URL 그대로 사용)
+              const newImage = new Image({
+                  path: dallEImageUrl,
+                  isExternalUrl: true,
+                  prompt: currentPrompt._id,
+                  student: currentPrompt.student._id,
+                  status: 'pending', // 이미지는 승인 대기 상태로 생성
+                  safetyLevel
+              });
+              await newImage.save();
+              generatedImageId = newImage._id.toString();
 
-                  const safetyLevel = await evaluateImageSafety(tempImageUrl); // 임시 URL로 평가 가정
+              // 프롬프트와 이미지 연결 및 상태 변경 ('processed')
+              currentPrompt.generatedImage = newImage._id;
+              currentPrompt.status = 'processed'; // 이미지 생성 성공 시 processed
+              await currentPrompt.save();
 
-                  // 이미지 정보 저장
-                  const newImage = new Image({
-                      path: localImagePath,
-                      isExternalUrl: false,
-                      prompt: currentPrompt._id,
-                      student: currentPrompt.student._id,
-                      status: 'pending', // 이미지는 승인 대기 상태로 생성
-                      safetyLevel
-                  });
-                  await newImage.save();
-                  generatedImageId = newImage._id.toString();
+              console.log(`[일괄 처리] 이미지 생성 완료: ${newImage._id} (프롬프트: ${currentPrompt._id}), 상태: processed`);
 
-                  // 프롬프트와 이미지 연결 및 상태 변경 ('processed')
-                  currentPrompt.generatedImage = newImage._id;
-                  currentPrompt.status = 'processed'; // 이미지 생성 성공 시 processed
-                  await currentPrompt.save();
-
-                  console.log(`[일괄 처리] 이미지 생성 완료: ${newImage._id} (프롬프트: ${currentPrompt._id}), 상태: processed`);
-
-                  // 새 이미지 생성 소켓 이벤트 (기존 로직과 동일)
-                  if (req.io) {
-                      const student = await User.findById(currentPrompt.student._id);
-                      if (student) {
-                         req.io.emit('imageGenerated', {
-                             _id: newImage._id,
-                             path: localImagePath,
-                             isExternalUrl: false,
-                             prompt: { _id: currentPrompt._id, content: currentPrompt.content },
-                             student: { _id: student._id, name: student.name, username: student.username },
-                             safetyLevel: newImage.safetyLevel,
-                             createdAt: newImage.createdAt
-                         });
-                         console.log(`[일괄 처리] 새 이미지 생성 이벤트 전송: ${newImage._id}`);
-                      }
+              // 새 이미지 생성 소켓 이벤트 (기존 로직과 동일)
+              if (req.io) {
+                  const student = await User.findById(currentPrompt.student._id);
+                  if (student) {
+                     req.io.emit('imageGenerated', {
+                         _id: newImage._id,
+                         path: dallEImageUrl,
+                         isExternalUrl: true,
+                         prompt: { _id: currentPrompt._id, content: currentPrompt.content },
+                         student: { _id: student._id, name: student.name, username: student.username },
+                         safetyLevel: newImage.safetyLevel,
+                         createdAt: newImage.createdAt
+                     });
+                     console.log(`[일괄 처리] 새 이미지 생성 이벤트 전송: ${newImage._id}`);
                   }
+              }
 
-                  status = 'success';
-                  successCount++;
-              } catch (imageError) {
-                  console.error(`[일괄 처리] 이미지 생성/저장 실패 (프롬프트: ${prompt._id}):`, imageError);
-                  errorMessage = imageError.message || '이미지 생성/저장 실패';
-                  errorCount++;
-
-                  // 이미지 생성 실패 시 프롬프트 상태를 'processed'로 변경 시도
-                  try {
-                      currentPrompt.status = 'processed'; // 이미지 생성 실패해도 processed
-                      await currentPrompt.save();
-                      console.log(`[일괄 처리] 이미지 생성 실패로 프롬프트(${prompt._id}) 상태를 'processed'로 변경`);
-                      if (req.io && currentPrompt.student?._id) {
-                          req.io.to(currentPrompt.student._id.toString()).emit('promptProcessed', {
-                              promptId: currentPrompt._id,
-                              studentId: currentPrompt.student._id,
-                              status: 'processed',
-                              message: '이미지 생성 중 오류가 발생했습니다'
-                          });
-                      }
-                  } catch (statusUpdateError) {
-                      console.error(`[일괄 처리] 실패 후 프롬프트(${prompt._id}) 상태 업데이트 오류:`, statusUpdateError);
-                      errorMessage += ` (상태 업데이트 실패: ${statusUpdateError.message})`;
-                  }
-              } // 이미지 생성 try-catch 끝
-
-          } catch (promptError) {
-              console.error(`[일괄 처리] 프롬프트 처리 오류 (${prompt._id}):`, promptError);
-              errorMessage = promptError.message || '프롬프트 처리 오류';
+              status = 'success';
+              successCount++;
+          } catch (imageError) {
+              console.error(`[일괄 처리] 이미지 생성/저장 실패 (프롬프트: ${prompt._id}):`, imageError);
+              errorMessage = imageError.message || '이미지 생성/저장 실패';
               errorCount++;
-              // 프롬프트 처리 자체 오류 시 상태 복구 시도 (선택 사항)
+
+              // 이미지 생성 실패 시 프롬프트 상태를 'processed'로 변경 시도
               try {
-                  const recoveryPrompt = await Prompt.findById(prompt._id);
-                  if (recoveryPrompt && recoveryPrompt.status === 'processing') {
-                      recoveryPrompt.status = 'pending'; // 다시 pending으로
-                      await recoveryPrompt.save();
+                  currentPrompt.status = 'processed'; // 이미지 생성 실패해도 processed
+                  await currentPrompt.save();
+                  console.log(`[일괄 처리] 이미지 생성 실패로 프롬프트(${prompt._id}) 상태를 'processed'로 변경`);
+                  if (req.io && currentPrompt.student?._id) {
+                      req.io.to(currentPrompt.student._id.toString()).emit('promptProcessed', {
+                          promptId: currentPrompt._id,
+                          studentId: currentPrompt.student._id,
+                          status: 'processed',
+                          message: '이미지 생성 중 오류가 발생했습니다'
+                      });
                   }
-              } catch (recoveryError) { /* 무시 */ }
-          } // 프롬프트 처리 try-catch 끝
+              } catch (statusUpdateError) {
+                  console.error(`[일괄 처리] 실패 후 프롬프트(${prompt._id}) 상태 업데이트 오류:`, statusUpdateError);
+                  errorMessage += ` (상태 업데이트 실패: ${statusUpdateError.message})`;
+              }
+          } // 이미지 생성 try-catch 끝
 
-          processedDetails.push({ promptId: prompt._id.toString(), status, imageId: generatedImageId, error: errorMessage });
+      } catch (promptError) {
+          console.error(`[일괄 처리] 프롬프트 처리 오류 (${prompt._id}):`, promptError);
+          errorMessage = promptError.message || '프롬프트 처리 오류';
+          errorCount++;
+          // 프롬프트 처리 자체 오류 시 상태 복구 시도 (선택 사항)
+          try {
+              const recoveryPrompt = await Prompt.findById(prompt._id);
+              if (recoveryPrompt && recoveryPrompt.status === 'processing') {
+                  recoveryPrompt.status = 'pending'; // 다시 pending으로
+                  await recoveryPrompt.save();
+              }
+          } catch (recoveryError) { /* 무시 */ }
+      } // 프롬프트 처리 try-catch 끝
 
-      } // for 루프 끝
+      processedDetails.push({ promptId: prompt._id.toString(), status, imageId: generatedImageId, error: errorMessage });
 
-      console.log(`[일괄 처리] 비동기 작업 완료: 총 ${promptsToProcess.length}개 처리 시도, 성공 ${successCount}개, 실패 ${errorCount}개`);
+  } // for 루프 끝
 
-      // 완료 이벤트 전송
-      if (req.io) {
-        req.io.emit('batchProcessingCompleted', {
-          teacherId: req.user._id,
-          totalProcessed: promptsToProcess.length,
-          successCount,
-          errorCount,
-          details: processedDetails // 상세 결과 포함
-        });
-        console.log(`[일괄 처리] 일괄 처리 완료 이벤트 전송: 총 ${promptsToProcess.length}개 처리 시도, 성공 ${successCount}개, 실패 ${errorCount}개`);
-      }
+  console.log(`[일괄 처리] 비동기 작업 완료: 총 ${promptsToProcess.length}개 처리 시도, 성공 ${successCount}개, 실패 ${errorCount}개`);
 
-    })();
+  // 완료 이벤트 전송
+  if (req.io) {
+    req.io.emit('batchProcessingCompleted', {
+      teacherId: req.user._id,
+      totalProcessed: promptsToProcess.length,
+      successCount,
+      errorCount,
+      details: processedDetails // 상세 결과 포함
+    });
+    console.log(`[일괄 처리] 일괄 처리 완료 이벤트 전송: 총 ${promptsToProcess.length}개 처리 시도, 성공 ${successCount}개, 실패 ${errorCount}개`);
+  }
+
+})();
 
   } catch (error) {
     console.error('일괄 프롬프트 처리 오류:', error);
