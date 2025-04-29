@@ -235,52 +235,88 @@ const Student = () => {
   // 이미지 다운로드 핸들러
   const handleDownloadImage = async (url, fileName) => {
     try {
-      // 이미지 URL이 상대 경로인 경우 절대 경로로 변환
-      const absoluteUrl = url.startsWith('http') 
-        ? url 
-        : `http://localhost:5000${url.startsWith('/') ? url : `/${url}`}`;
-      
-      console.log('이미지 다운로드 시도:', absoluteUrl);
-      
-      // fetch를 사용하여 이미지 데이터 가져오기
-      const response = await fetch(absoluteUrl);
-      
-      if (!response.ok) {
-        throw new Error('이미지를 가져오는데 실패했습니다');
-      }
-      
-      // Blob으로 변환
-      const blob = await response.blob();
-      
-      // Blob URL 생성
-      const blobUrl = window.URL.createObjectURL(blob);
-      
-      // 다운로드 링크 생성 및 클릭
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = fileName || 'image.png'; // 파일명 설정
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      
-      // 자동 클릭으로 다운로드 시작
-      link.click();
-      
-      // 정리
-      setTimeout(() => {
-        window.URL.revokeObjectURL(blobUrl);
+      console.log('다운로드 요청 URL:', url);
+      const isExternal = url.startsWith('http');
+      fileName = fileName || 'generated_image.png'; // 기본 파일명 설정
+
+      if (isExternal) {
+        // --- 외부 URL 직접 다운로드 로직 ---
+        console.log('외부 URL 감지됨. 직접 다운로드 시도:', url);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        // CORS 문제 회피를 위해 target='_blank' 추가 시도 (선택 사항)
+        // link.target = '_blank';
+        // link.rel = 'noopener noreferrer'; // target='_blank' 사용 시 추가
+        document.body.appendChild(link);
+        link.click();
         document.body.removeChild(link);
-      }, 100);
-      
-      setNotification({
-        show: true,
-        message: '이미지가 다운로드 폴더에 저장되었습니다.',
-        type: 'success'
-      });
-      
-      // 5초 후 알림 닫기
-      setTimeout(() => {
-        setNotification(prev => ({ ...prev, show: false }));
-      }, 5000);
+        console.log('직접 다운로드 링크 클릭됨.');
+        
+        // 성공 알림은 fetch 방식과 동일하게 표시
+        setNotification({
+          show: true,
+          message: '이미지 다운로드가 시작되었습니다.', // 메시지 변경
+          type: 'success'
+        });
+        setTimeout(() => {
+          setNotification(prev => ({ ...prev, show: false }));
+        }, 5000);
+
+      } else {
+        // --- 내부 URL fetch 후 다운로드 로직 (기존 방식) ---
+        console.log('내부 URL 감지됨. Fetch 방식으로 다운로드 시도.');
+        const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
+        const path = url.startsWith('/') ? url : `/${url}`;
+        const absoluteUrl = `${backendUrl}${path}`;
+        console.log('내부 URL 절대 경로:', absoluteUrl);
+
+        const token = localStorage.getItem('token');
+        const headers = {};
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        const response = await fetch(absoluteUrl, { headers });
+
+        if (!response.ok) {
+          let errorMsg = `이미지를 가져오는데 실패했습니다 (상태: ${response.status})`;
+          try {
+            const errorData = await response.json();
+            if (errorData && errorData.message) {
+              errorMsg += `: ${errorData.message}`;
+            }
+          } catch (jsonError) {
+            console.error('오류 응답 파싱 실패:', jsonError);
+          }
+          throw new Error(errorMsg);
+        }
+
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fileName;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+
+        setTimeout(() => {
+          window.URL.revokeObjectURL(blobUrl);
+          document.body.removeChild(link);
+        }, 100);
+
+        setNotification({
+          show: true,
+          message: '이미지가 다운로드 폴더에 저장되었습니다.',
+          type: 'success'
+        });
+        setTimeout(() => {
+          setNotification(prev => ({ ...prev, show: false }));
+        }, 5000);
+      }
+
     } catch (error) {
       console.error('이미지 다운로드 오류:', error);
       setNotification({
