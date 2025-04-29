@@ -925,12 +925,12 @@ const Teacher = () => {
                       src={image.isExternalUrl 
                         ? image.path // 외부 URL은 그대로 사용
                         : image.path.startsWith('http') 
-                          ? image.path 
-                          : `http://localhost:5000${image.path}`} 
+                          ? image.path // 이미 http로 시작하는 경우 (예: 다른 외부 저장소)
+                          : `${process.env.REACT_APP_API_URL || 'http://localhost:8080'}${image.path}`} // 환경 변수 사용 및 기본 포트 8080으로 수정
                       alt="생성된 이미지" 
                       onError={(e) => {
-                        console.error('이미지 로드 실패:', e);
-                        e.target.src = 'https://via.placeholder.com/400x300?text=이미지+로드+실패';
+                        console.error('이미지 로드 실패:', e.target.src, e);
+                        e.target.src = 'https://via.placeholder.com/400x300?text=이미지+로드+실패'; // 대체 이미지 URL
                       }}
                       onLoad={() => console.log('이미지 로드 성공:', image.path)}
                     />
