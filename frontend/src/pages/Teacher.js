@@ -327,7 +327,7 @@ const Teacher = () => {
   const [newPassword, setNewPassword] = useState('');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
-  // 프롬프트 및 이미지 조회
+  // fetchItems 함수 최상단에 위치
   const fetchItems = async () => {
     console.log('fetchItems 실행됨, activeTab:', activeTab);
     setLoading(true);
@@ -336,21 +336,13 @@ const Teacher = () => {
         console.log('teacherAPI.getPendingPrompts 호출 시도');
         const data = await teacherAPI.getPendingPrompts();
         console.log('교사 화면 - 대기 중인 프롬프트 응답:', data);
-        
-        // data에 prompts 배열이 있으면 사용, 없으면 data 자체가 배열로 간주
         const prompts = data.prompts || data;
-        console.log('처리할 프롬프트 배열:', prompts);
-        
         setPendingPrompts(Array.isArray(prompts) ? prompts : []);
-      } else {
+      } else if (activeTab === 'images') {
         console.log('teacherAPI.getPendingImages 호출 시도');
         const data = await teacherAPI.getPendingImages();
         console.log('교사 화면 - 대기 중인 이미지 응답:', data);
-        
-        // data에 images 배열이 있으면 사용, 없으면 data 자체가 배열로 간주
         const images = data.images || data;
-        console.log('처리할 이미지 배열:', images);
-        
         setPendingImages(Array.isArray(images) ? images : []);
       }
     } catch (err) {
@@ -361,52 +353,54 @@ const Teacher = () => {
   };
 
   useEffect(() => {
-    // 소켓 연결 및 이벤트 리스너 설정
-    const socket = socketService.connect();
-    
-    console.log('교사 화면: 소켓 연결 설정 완료');
-    
-    const cleanup = setupSocketListeners(socket, {
-      onNewPromptSubmitted: (data) => {
-        // 새 프롬프트가 제출되면 목록 새로고침
-        console.log('새 프롬프트 제출 이벤트 수신:', data);
-        if (activeTab === 'prompts') {
-          console.log('프롬프트 목록 새로고침');
-          fetchItems();
-        }
-      },
-      onImageGenerated: (data) => {
-        // 새 이미지가 생성되면 목록 새로고침
-        console.log('이미지 생성 이벤트 수신:', data);
-        if (activeTab === 'images') {
-          console.log('이미지 목록 새로고침');
-          fetchItems();
-        }
-      },
-      onBatchProcessingCompleted: (data) => {
-        // 일괄 처리가 완료되면 목록 새로고침
-        console.log('일괄 처리 완료 이벤트 수신:', data);
-        setBatchProcessing(false);
-        setBatchProcessingIds([]);
-        // 일괄 처리 완료 시점에만 목록 새로고침
+    fetchItems();
+  }, [activeTab]);
+
+  // 소켓 연결 및 이벤트 리스너 설정
+  const socket = socketService.connect();
+  
+  console.log('교사 화면: 소켓 연결 설정 완료');
+  
+  const cleanup = setupSocketListeners(socket, {
+    onNewPromptSubmitted: (data) => {
+      // 새 프롬프트가 제출되면 목록 새로고침
+      console.log('새 프롬프트 제출 이벤트 수신:', data);
+      if (activeTab === 'prompts') {
+        console.log('프롬프트 목록 새로고침');
         fetchItems();
-      },
-      onPromptStatusChange: (data) => {
-        // 프롬프트 상태가 변경되면 목록에서 제거
-        console.log('프롬프트 상태 변경 이벤트 수신:', data);
-        if ((data.status === 'approved' || data.status === 'rejected') && activeTab === 'prompts') {
-          setPendingPrompts(prev => prev.filter(p => p._id !== data.promptId));
-          // 일괄 처리 목록에서도 제거
-          setBatchProcessingIds(prev => prev.filter(id => id !== data.promptId));
-        }
       }
-    });
-    
-    return () => {
-      cleanup && cleanup();
-      socketService.disconnect();
-    };
-  }, [activeTab]); // fetchItems는 이 훅 내부에서 정의되므로 의존성 목록에 포함하지 않음
+    },
+    onImageGenerated: (data) => {
+      // 새 이미지가 생성되면 목록 새로고침
+      console.log('이미지 생성 이벤트 수신:', data);
+      if (activeTab === 'images') {
+        console.log('이미지 목록 새로고침');
+        fetchItems();
+      }
+    },
+    onBatchProcessingCompleted: (data) => {
+      // 일괄 처리가 완료되면 목록 새로고침
+      console.log('일괄 처리 완료 이벤트 수신:', data);
+      setBatchProcessing(false);
+      setBatchProcessingIds([]);
+      // 일괄 처리 완료 시점에만 목록 새로고침
+      fetchItems();
+    },
+    onPromptStatusChange: (data) => {
+      // 프롬프트 상태가 변경되면 목록에서 제거
+      console.log('프롬프트 상태 변경 이벤트 수신:', data);
+      if ((data.status === 'approved' || data.status === 'rejected') && activeTab === 'prompts') {
+        setPendingPrompts(prev => prev.filter(p => p._id !== data.promptId));
+        // 일괄 처리 목록에서도 제거
+        setBatchProcessingIds(prev => prev.filter(id => id !== data.promptId));
+      }
+    }
+  });
+  
+  return () => {
+    cleanup && cleanup();
+    socketService.disconnect();
+  };
 
   // 탭 변경 핸들러
   const handleTabChange = (tab) => {
