@@ -768,6 +768,8 @@ const Teacher = () => {
         .filter(prompt => prompt && prompt._id)
         .map(prompt => prompt._id);
 
+      console.log('일괄 처리할 프롬프트 ID 목록:', promptIds);
+
       if (promptIds.length === 0) {
         throw new Error('유효한 프롬프트 ID가 없습니다.');
       }
@@ -778,7 +780,9 @@ const Teacher = () => {
       const previousPrompts = [...pendingPrompts];
       
       try {
+        console.log('일괄 처리 API 호출 시작');
         const result = await teacherAPI.batchProcessPrompts(promptIds);
+        console.log('일괄 처리 API 응답:', result);
         
         // 성공 시 상태 업데이트
         setNotification({
@@ -790,9 +794,10 @@ const Teacher = () => {
         // 처리된 프롬프트 제거
         setPendingPrompts(prev => prev.filter(p => !promptIds.includes(p._id)));
       } catch (apiError) {
+        console.error('일괄 처리 API 오류:', apiError);
         // API 오류 시 상태 복구
         setPendingPrompts(previousPrompts);
-        throw new Error(apiError.message || '서버 처리 중 오류가 발생했습니다.');
+        throw new Error(apiError.response?.data?.message || apiError.message || '서버 처리 중 오류가 발생했습니다.');
       }
     } catch (err) {
       console.error('일괄 처리 중 오류 발생:', err);
