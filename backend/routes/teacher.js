@@ -828,11 +828,22 @@ router.post('/batch-process-prompts', authenticateTeacher, async (req, res) => {
     startBatchProcessing(pendingPrompts.length);
     
     // 먼저 모든 프롬프트 상태를 'processing'으로 변경하여 중복 처리 방지
+    let updateErrors = [];
     for (const prompt of pendingPrompts) {
-      prompt.status = 'processing'; // 일시적인 처리 중 상태
-      await prompt.save();
+      try {
+        prompt.status = 'processing'; // 일시적인 처리 중 상태
+        await prompt.save();
+      } catch (updateError) {
+        console.error(`[일괄 처리] 초기 상태 업데이트 오류 (${prompt._id}):`, updateError);
+        updateErrors.push({ promptId: prompt._id, error: updateError.message });
+        // 여기서 오류 발생 시 계속 진행할지, 아니면 전체 중단할지 결정 필요
+        // 일단은 오류 로깅 후 계속 진행하도록 함
+      }
     }
     
+    // 만약 초기 상태 업데이트에서 오류가 있었다면, 클라이언트에 알리고 중단할 수도 있음
+    // 예: if (updateErrors.length > 0) { ... return res.status(500) ... }
+
     // 비동기 처리 시작 (응답은 먼저 보내고 백그라운드에서 처리)
     res.status(202).json({
       success: true,
