@@ -139,29 +139,42 @@ export const teacherAPI = {
   },
 
   // 프롬프트 일괄 처리 함수
-  batchProcessPrompts: async (promptIds = []) => {
+  batchProcessPrompts: async (promptIds) => {
     try {
-      const response = await axios.post(`${API_URL}/teacher/batch-process-prompts`, {
-        promptIds: promptIds.length > 0 ? promptIds : undefined
-      });
-      return response.data;
-    } catch (error) {
-      // 오류 응답 데이터 확인 및 명확한 오류 메시지 전달
-      if (error.response?.data) {
-        const errorData = error.response.data;
-        
-        // 크레딧 부족 오류 메시지 명확히 처리
-        if (errorData.message && errorData.message.includes('크레딧이 부족')) {
-          throw {
-            ...errorData,
-            message: `크레딧이 부족하여 일괄 처리를 진행할 수 없습니다. (보유: ${errorData.credits || 0}, 필요: ${errorData.neededCredits || 1})`
-          };
+      console.log('일괄 처리 API 요청 시작:', promptIds);
+      const response = await axios.post(
+        `${API_URL}/api/teacher/batch-process-prompts`,
+        { promptIds },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          validateStatus: function (status) {
+            return status < 500; // 500 이상의 상태 코드만 reject
+          }
         }
-        
-        throw errorData;
+      );
+      
+      console.log('일괄 처리 API 응답:', response);
+      
+      if (response.status >= 400) {
+        throw new Error(response.data?.message || '서버 오류가 발생했습니다');
       }
       
-      throw { message: '일괄 처리 중 오류가 발생했습니다.' };
+      return response.data;
+    } catch (error) {
+      console.error('일괄 처리 API 호출 오류:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          data: error.config?.data
+        }
+      });
+      throw error;
     }
   },
 
