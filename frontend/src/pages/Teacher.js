@@ -273,34 +273,30 @@ const formatDate = (dateString) => {
   
   if (!dateString) return '날짜 정보 없음';
   
-  // 문자열이 아닌 경우 문자열로 변환
-  const dateStr = String(dateString);
-  console.log('문자열 변환 후:', dateStr);
-  
   try {
-    // 날짜 객체 생성 시도
-    const dateObj = new Date(dateStr);
-    console.log('날짜 객체 생성 결과:', dateObj);
+    // ISO 8601 형식 파싱
+    const match = String(dateString).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
     
-    // 유효한 날짜인지 확인
-    if (isNaN(dateObj.getTime())) {
-      console.log('유효하지 않은 날짜');
-      return dateStr;
+    if (match) {
+      const [_, year, month, day, hours, minutes] = match;
+      return `${year}-${month}-${day} ${hours}:${minutes}`;
     }
     
-    // 년, 월, 일, 시, 분 추출
-    const year = dateObj.getFullYear();
-    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const day = String(dateObj.getDate()).padStart(2, '0');
-    const hours = String(dateObj.getHours()).padStart(2, '0');
-    const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+    // ISO 형식이 아닌 경우 기본 날짜 변환 시도
+    const dateObj = new Date(dateString);
+    if (!isNaN(dateObj.getTime())) {
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      const hours = String(dateObj.getHours()).padStart(2, '0');
+      const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day} ${hours}:${minutes}`;
+    }
     
-    const formattedDate = `${year}-${month}-${day} ${hours}:${minutes}`;
-    console.log('포맷팅된 날짜:', formattedDate);
-    return formattedDate;
+    return String(dateString);
   } catch (err) {
     console.error('날짜 변환 오류:', err);
-    return dateStr;
+    return String(dateString);
   }
 };
 
