@@ -107,18 +107,20 @@ const Login = () => {
       
       // 로그인 성공 후 사용자 역할에 따라 다른 페이지로 리디렉션
       const user = response.user;
+      let redirectUrl = '/';
+      
       if (user.role === 'student') {
-        navigate('/student');
+        redirectUrl = '/student';
       } else if (user.role === 'teacher') {
-        navigate('/teacher');
+        redirectUrl = '/teacher';
       } else if (user.role === 'admin') {
-        navigate('/admin');
-      } else {
-        navigate('/');
+        redirectUrl = '/admin';
       }
+      
+      // navigate 대신 window.location을 사용하여 페이지 새로고침
+      window.location.href = redirectUrl;
     } catch (err) {
       setError(err.message || '로그인에 실패했습니다. 사용자 이름과 비밀번호를 확인해주세요.');
-    } finally {
       setLoading(false);
     }
   };
