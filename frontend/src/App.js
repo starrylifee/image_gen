@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Student from './pages/Student';
 import Teacher from './pages/Teacher';
+import Admin from './pages/Admin';
 import ProtectedRoute from './components/ProtectedRoute';
 import Notification from './components/Notification';
 import { authAPI } from './services/api';
@@ -168,6 +169,11 @@ function App() {
           <Route path="/teacher" element={
             <ProtectedRoute requiredRole="teacher">
               <Teacher />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin" element={
+            <ProtectedRoute requiredRole="admin">
+              <Admin />
             </ProtectedRoute>
           } />
           <Route path="/" element={user ? <Navigate to={getHomePage(user)} /> : <Navigate to="/login" />} />

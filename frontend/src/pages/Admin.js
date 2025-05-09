@@ -15,6 +15,24 @@ const Admin = () => {
   const [creditReason, setCreditReason] = useState('');
   const [viewHistoryTeacherId, setViewHistoryTeacherId] = useState(null);
   
+  // 계정 생성 관련 상태
+  const [newTeacher, setNewTeacher] = useState({
+    username: '',
+    password: '',
+    name: '',
+    classroom: '',
+    credits: 0
+  });
+  
+  // 학생 계정 생성 관련 상태
+  const [newStudents, setNewStudents] = useState('');
+  const [defaultStudentPassword, setDefaultStudentPassword] = useState('student123');
+  
+  // 비밀번호 변경 관련 상태
+  const [newPassword, setNewPassword] = useState('');
+  const [studentsList, setStudentsList] = useState([]);
+  const [showStudents, setShowStudents] = useState(false);
+  
   // 시스템 통계 관련 상태
   const [statistics, setStatistics] = useState(null);
   
@@ -128,6 +146,193 @@ const Admin = () => {
       setLoading(false);
     }
   };
+
+  // 교사 계정 생성
+  const handleCreateTeacher = async (e) => {
+    e.preventDefault();
+    
+    // 기본 검증
+    if (!newTeacher.username || !newTeacher.password || !newTeacher.name) {
+      setError('아이디, 비밀번호, 이름은 필수 입력 항목입니다');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setError(null);
+      setSuccess(null);
+      
+      const response = await fetch('http://localhost:5000/api/admin/create-teacher', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(newTeacher)
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || '교사 계정 생성에 실패했습니다');
+      }
+      
+      // 성공 메시지 표시
+      setSuccess(`교사 계정 "${newTeacher.name}(${newTeacher.username})"이 생성되었습니다`);
+      
+      // 교사 목록 새로고침
+      fetchTeachers();
+      
+      // 입력 필드 초기화
+      setNewTeacher({
+        username: '',
+        password: '',
+        name: '',
+        classroom: '',
+        credits: 0
+      });
+    } catch (err) {
+      console.error('교사 계정 생성 오류:', err);
+      setError(err.message || '교사 계정 생성에 실패했습니다');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // 학생 목록 조회
+  const fetchTeacherStudents = async (teacherId) => {
+    if (!teacherId) {
+      setError('선택된 교사가 없습니다');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setError(null);
+      setShowStudents(true);
+      
+      const response = await fetch(`http://localhost:5000/api/admin/teachers/${teacherId}/students`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('학생 목록을 불러오는데 실패했습니다');
+      }
+      
+      const data = await response.json();
+      setStudentsList(data.students || []);
+    } catch (err) {
+      console.error('학생 목록 조회 오류:', err);
+      setError(err.message || '학생 목록을 불러오는데 실패했습니다');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // 학생 계정 생성
+  const handleCreateStudents = async (e) => {
+    e.preventDefault();
+    
+    if (!selectedTeacher) {
+      setError('학생을 생성할 교사를 선택해주세요');
+      return;
+    }
+    
+    if (!newStudents.trim()) {
+      setError('학생 정보를 입력해주세요');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setError(null);
+      setSuccess(null);
+      
+      // 학생 정보 파싱
+      const studentLines = newStudents.split('\n').filter(line => line.trim());
+      const students = studentLines.map(line => {
+        const [username, name] = line.split(',').map(item => item.trim());
+        return { username, name };
+      });
+      
+      const response = await fetch(`http://localhost:5000/api/admin/teachers/${selectedTeacher._id}/create-students`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          students,
+          defaultPassword: defaultStudentPassword
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || '학생 계정 생성에 실패했습니다');
+      }
+      
+      // 성공 메시지 표시
+      setSuccess(
+        `${data.createdCount}명의 학생 계정이 생성되었습니다` + 
+        (data.failedCount > 0 ? `. ${data.failedCount}명은 생성 실패.` : '')
+      );
+      
+      // 학생 목록 새로고침
+      fetchTeacherStudents(selectedTeacher._id);
+      
+      // 입력 필드 초기화
+      setNewStudents('');
+    } catch (err) {
+      console.error('학생 계정 생성 오류:', err);
+      setError(err.message || '학생 계정 생성에 실패했습니다');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // 비밀번호 변경
+  const handleChangePassword = async (userId) => {
+    if (!newPassword) {
+      setError('새 비밀번호를 입력해주세요');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setError(null);
+      setSuccess(null);
+      
+      const response = await fetch(`http://localhost:5000/api/admin/users/${userId}/password`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ newPassword })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || '비밀번호 변경에 실패했습니다');
+      }
+      
+      // 성공 메시지 표시
+      setSuccess(`${data.user.name}(${data.user.username})의 비밀번호가 성공적으로 변경되었습니다`);
+      
+      // 입력 필드 초기화
+      setNewPassword('');
+    } catch (err) {
+      console.error('비밀번호 변경 오류:', err);
+      setError(err.message || '비밀번호 변경에 실패했습니다');
+    } finally {
+      setLoading(false);
+    }
+  };
   
   // 시스템 통계 조회
   const fetchStatistics = async () => {
@@ -161,6 +366,8 @@ const Admin = () => {
       fetchTeachers();
     } else if (activeTab === 'statistics') {
       fetchStatistics();
+    } else if (activeTab === 'accounts') {
+      fetchTeachers();
     }
   }, [activeTab]);
   
@@ -323,6 +530,251 @@ const Admin = () => {
     );
   };
   
+  // 계정 관리 화면 렌더링
+  const renderAccountManagement = () => {
+    return (
+      <div>
+        <SectionTitle>계정 관리</SectionTitle>
+        
+        {error && <ErrorMessage>{error}</ErrorMessage>}
+        {success && <SuccessMessage>{success}</SuccessMessage>}
+        
+        <Subsection>
+          <h3>교사 계정 생성</h3>
+          <FormContainer>
+            <form onSubmit={handleCreateTeacher}>
+              <FormGroup>
+                <Label htmlFor="teacherUsername">아이디</Label>
+                <Input
+                  id="teacherUsername"
+                  value={newTeacher.username}
+                  onChange={(e) => setNewTeacher({...newTeacher, username: e.target.value})}
+                  placeholder="교사 아이디 (예: teacher1)"
+                  required
+                />
+              </FormGroup>
+              
+              <FormGroup>
+                <Label htmlFor="teacherPassword">비밀번호</Label>
+                <Input
+                  id="teacherPassword"
+                  type="password"
+                  value={newTeacher.password}
+                  onChange={(e) => setNewTeacher({...newTeacher, password: e.target.value})}
+                  placeholder="비밀번호"
+                  required
+                />
+              </FormGroup>
+              
+              <FormGroup>
+                <Label htmlFor="teacherName">이름</Label>
+                <Input
+                  id="teacherName"
+                  value={newTeacher.name}
+                  onChange={(e) => setNewTeacher({...newTeacher, name: e.target.value})}
+                  placeholder="교사 이름"
+                  required
+                />
+              </FormGroup>
+              
+              <FormGroup>
+                <Label htmlFor="teacherClassroom">학급명</Label>
+                <Input
+                  id="teacherClassroom"
+                  value={newTeacher.classroom}
+                  onChange={(e) => setNewTeacher({...newTeacher, classroom: e.target.value})}
+                  placeholder="학급명 (예: 3학년 2반)"
+                />
+              </FormGroup>
+              
+              <FormGroup>
+                <Label htmlFor="teacherCredits">초기 크레딧</Label>
+                <Input
+                  id="teacherCredits"
+                  type="number"
+                  min="0"
+                  value={newTeacher.credits}
+                  onChange={(e) => setNewTeacher({...newTeacher, credits: parseInt(e.target.value) || 0})}
+                  placeholder="초기 크레딧 수"
+                />
+              </FormGroup>
+              
+              <SubmitButton type="submit" disabled={loading}>
+                {loading ? '생성 중...' : '교사 계정 생성'}
+              </SubmitButton>
+            </form>
+          </FormContainer>
+        </Subsection>
+        
+        <Subsection>
+          <h3>교사 목록</h3>
+          <TableContainer>
+            {loading && !teachers.length ? (
+              <LoadingMessage>교사 목록을 불러오는 중...</LoadingMessage>
+            ) : teachers.length === 0 ? (
+              <EmptyMessage>등록된 교사가 없습니다.</EmptyMessage>
+            ) : (
+              <Table>
+                <thead>
+                  <tr>
+                    <th>이름</th>
+                    <th>아이디</th>
+                    <th>반</th>
+                    <th>크레딧</th>
+                    <th>액션</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teachers.map(teacher => (
+                    <tr key={teacher._id} className={selectedTeacher?._id === teacher._id ? 'selected' : ''}>
+                      <td>{teacher.name}</td>
+                      <td>{teacher.username}</td>
+                      <td>{teacher.metadata?.classroom || '미지정'}</td>
+                      <td>{teacher.credits}</td>
+                      <td>
+                        <ButtonGroup>
+                          <ActionButton 
+                            onClick={() => {
+                              setSelectedTeacher(teacher);
+                              setShowStudents(false);
+                            }}
+                            className="select"
+                          >
+                            선택
+                          </ActionButton>
+                          <ActionButton 
+                            onClick={() => fetchTeacherStudents(teacher._id)}
+                            className="view"
+                          >
+                            학생 목록
+                          </ActionButton>
+                        </ButtonGroup>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            )}
+          </TableContainer>
+        </Subsection>
+        
+        {/* 비밀번호 변경 */}
+        {selectedTeacher && (
+          <Subsection>
+            <h3>{selectedTeacher.name} 교사 비밀번호 변경</h3>
+            <FormContainer>
+              <FormGroup>
+                <Label htmlFor="newPassword">새 비밀번호</Label>
+                <InputGroup>
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="새 비밀번호"
+                  />
+                  <ActionButton 
+                    onClick={() => handleChangePassword(selectedTeacher._id)}
+                    className="select"
+                    disabled={loading || !newPassword}
+                  >
+                    {loading ? '변경 중...' : '변경'}
+                  </ActionButton>
+                </InputGroup>
+              </FormGroup>
+            </FormContainer>
+          </Subsection>
+        )}
+        
+        {/* 학생 계정 생성 */}
+        {selectedTeacher && (
+          <Subsection>
+            <h3>{selectedTeacher.name} 교사의 학생 계정 생성</h3>
+            <FormContainer>
+              <form onSubmit={handleCreateStudents}>
+                <FormGroup>
+                  <Label htmlFor="defaultStudentPassword">기본 비밀번호</Label>
+                  <Input
+                    id="defaultStudentPassword"
+                    value={defaultStudentPassword}
+                    onChange={(e) => setDefaultStudentPassword(e.target.value)}
+                    placeholder="모든 학생의 기본 비밀번호"
+                  />
+                  <HelpText>개별 비밀번호를 설정하지 않은 학생에게 적용됩니다</HelpText>
+                </FormGroup>
+                
+                <FormGroup>
+                  <Label htmlFor="newStudents">학생 정보 (한 줄에 하나씩)</Label>
+                  <TextArea
+                    id="newStudents"
+                    value={newStudents}
+                    onChange={(e) => setNewStudents(e.target.value)}
+                    placeholder="아이디,이름 (예: student1,홍길동)"
+                    rows="5"
+                  />
+                  <HelpText>각 줄에 "아이디,이름" 형식으로 입력하세요</HelpText>
+                </FormGroup>
+                
+                <SubmitButton type="submit" disabled={loading}>
+                  {loading ? '생성 중...' : '학생 계정 생성'}
+                </SubmitButton>
+              </form>
+            </FormContainer>
+          </Subsection>
+        )}
+        
+        {/* 학생 목록 */}
+        {showStudents && (
+          <Subsection>
+            <h3>{selectedTeacher ? `${selectedTeacher.name} 교사의 학생 목록` : '학생 목록'}</h3>
+            <TableContainer>
+              {loading ? (
+                <LoadingMessage>학생 목록을 불러오는 중...</LoadingMessage>
+              ) : studentsList.length === 0 ? (
+                <EmptyMessage>등록된 학생이 없습니다.</EmptyMessage>
+              ) : (
+                <Table>
+                  <thead>
+                    <tr>
+                      <th>이름</th>
+                      <th>아이디</th>
+                      <th>교실</th>
+                      <th>생성일</th>
+                      <th>액션</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {studentsList.map(student => (
+                      <tr key={student._id}>
+                        <td>{student.name}</td>
+                        <td>{student.username}</td>
+                        <td>{student.metadata?.classroom || '미지정'}</td>
+                        <td>{formatDate(student.createdAt)}</td>
+                        <td>
+                          <ButtonGroup>
+                            <ActionButton 
+                              onClick={() => {
+                                setNewPassword('');
+                                handleChangePassword(student._id);
+                              }}
+                              className="view"
+                            >
+                              비밀번호 초기화
+                            </ActionButton>
+                          </ButtonGroup>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              )}
+            </TableContainer>
+          </Subsection>
+        )}
+      </div>
+    );
+  };
+  
   // 시스템 통계 화면 렌더링
   const renderStatistics = () => {
     if (loading && !statistics) {
@@ -424,6 +876,12 @@ const Admin = () => {
             교사 크레딧 관리
           </Tab>
           <Tab
+            active={activeTab === 'accounts'}
+            onClick={() => setActiveTab('accounts')}
+          >
+            계정 관리
+          </Tab>
+          <Tab
             active={activeTab === 'statistics'}
             onClick={() => setActiveTab('statistics')}
           >
@@ -434,6 +892,7 @@ const Admin = () => {
       
       <ContentSection>
         {activeTab === 'teachers' && renderTeacherCreditManagement()}
+        {activeTab === 'accounts' && renderAccountManagement()}
         {activeTab === 'statistics' && renderStatistics()}
       </ContentSection>
     </PageContainer>
@@ -735,6 +1194,31 @@ const StatLabel = styled.span`
 const StatValue = styled.span`
   font-weight: 700;
   color: #333;
+`;
+
+const InputGroup = styled.div`
+  display: flex;
+  gap: 1rem;
+  
+  button {
+    flex-shrink: 0;
+  }
+`;
+
+const HelpText = styled.div`
+  font-size: 0.8rem;
+  color: #666;
+  margin-top: 0.3rem;
+`;
+
+const Subsection = styled.div`
+  margin-bottom: 2rem;
+  
+  h3 {
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+    color: #444;
+  }
 `;
 
 export default Admin; 
