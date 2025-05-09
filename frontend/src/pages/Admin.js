@@ -42,7 +42,7 @@ const Admin = () => {
       setLoading(true);
       setError(null);
       
-      const response = await fetch('http://localhost:5000/api/admin/teachers', {
+      const response = await fetch('/api/admin/teachers', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -69,7 +69,7 @@ const Admin = () => {
       setError(null);
       setViewHistoryTeacherId(teacherId);
       
-      const response = await fetch(`http://localhost:5000/api/admin/teachers/${teacherId}/credits`, {
+      const response = await fetch(`/api/admin/teachers/${teacherId}/credits`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -109,7 +109,7 @@ const Admin = () => {
       setError(null);
       setSuccess(null);
       
-      const response = await fetch(`http://localhost:5000/api/admin/teachers/${selectedTeacher._id}/credits`, {
+      const response = await fetch(`/api/admin/teachers/${selectedTeacher._id}/credits`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -162,7 +162,7 @@ const Admin = () => {
       setError(null);
       setSuccess(null);
       
-      const response = await fetch('http://localhost:5000/api/admin/create-teacher', {
+      const response = await fetch('/api/admin/create-teacher', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -211,7 +211,7 @@ const Admin = () => {
       setError(null);
       setShowStudents(true);
       
-      const response = await fetch(`http://localhost:5000/api/admin/teachers/${teacherId}/students`, {
+      const response = await fetch(`/api/admin/teachers/${teacherId}/students`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -257,7 +257,7 @@ const Admin = () => {
         return { username, name };
       });
       
-      const response = await fetch(`http://localhost:5000/api/admin/teachers/${selectedTeacher._id}/create-students`, {
+      const response = await fetch(`/api/admin/teachers/${selectedTeacher._id}/create-students`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -306,7 +306,7 @@ const Admin = () => {
       setError(null);
       setSuccess(null);
       
-      const response = await fetch(`http://localhost:5000/api/admin/users/${userId}/password`, {
+      const response = await fetch(`/api/admin/users/${userId}/password`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -340,7 +340,7 @@ const Admin = () => {
       setLoading(true);
       setError(null);
       
-      const response = await fetch('http://localhost:5000/api/admin/statistics', {
+      const response = await fetch('/api/admin/statistics', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
