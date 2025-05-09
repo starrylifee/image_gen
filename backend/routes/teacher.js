@@ -500,17 +500,26 @@ router.post('/process-image', authenticateTeacher, async (req, res) => {
     // 소켓을 통해 학생에게 알림
     if (req.io && image.student?._id) { // image.student가 있는지 확인
       if (status === 'approved') {
+        // 경로 정규화 추가
+        let imagePath = image.path;
+        if (!image.isExternalUrl && !imagePath.startsWith('/')) {
+          imagePath = `/${imagePath}`;
+        }
+        
         // 외부 URL인 경우 그대로 전달, 아닌 경우 완전한 URL 형태로 전달
         const imageUrl = image.isExternalUrl
           ? image.path
-          : `${req.protocol}://${req.get('host')}${image.path}`; // 완전한 URL로 수정
+          : `${req.protocol}://${req.get('host')}${imagePath}`; // 완전한 URL로 수정
+        
+        console.log(`이미지 승인 이벤트 전송 - 이미지 URL: ${imageUrl}`);
         
         // 특정 학생에게만 이벤트 전송 (room 기능 사용)
         req.io.to(image.student._id.toString()).emit('imageApproved', {
           imageId: image._id,
           studentId: image.student._id,
           imageUrl: imageUrl,
-          promptId: image.prompt // 프롬프트 ID도 함께 전송
+          promptId: image.prompt, // 프롬프트 ID도 함께 전송
+          isExternalUrl: image.isExternalUrl
         });
         
         console.log(`이미지 승인 이벤트를 학생(${image.student._id})에게만 전송했습니다`);

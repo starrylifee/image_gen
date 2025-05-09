@@ -413,26 +413,53 @@ const Student = () => {
         console.log('이미지 상태 변경 이벤트:', data);
         if (data.imageId) {
           if (data.status === 'approved') {
+            // 이미지 URL 확인 로깅 추가
+            console.log('승인된 이미지 URL:', data.imageUrl);
+            
+            // null/undefined 체크 추가
+            if (!data.imageUrl) {
+              console.error('이미지 URL이 없습니다:', data);
+              return;
+            }
+            
             // 이미지가 승인되면 즉시 승인된 이미지 목록에 추가
             const newImage = {
               _id: data.imageId,
               path: data.imageUrl,
-              isExternalUrl: data.imageUrl.startsWith('http'),
+              isExternalUrl: data.isExternalUrl || data.imageUrl.startsWith('http'),
+              promptId: data.promptId, // promptId 추가 (프롬프트 필터링에 필요)
               createdAt: new Date().toISOString()
             };
             
-            setApprovedImages(prev => [newImage, ...prev]);
+            console.log('새로운 이미지 객체 생성:', newImage);
+            
+            setApprovedImages(prev => {
+              // 중복 방지: 같은 ID의 이미지가 이미 있는지 확인
+              const exists = prev.some(img => img._id === data.imageId);
+              if (exists) {
+                console.log('이미 승인된 이미지입니다. 중복 추가 방지.');
+                return prev;
+              }
+              return [newImage, ...prev];
+            });
             
             // 프롬프트 상태 정리 - 승인된 이미지에 해당되는 프롬프트를 목록에서 제거
             setPendingPrompts(prev => {
+              if (prev.length === 0) return prev;
+              
+              console.log('프롬프트 필터링 - 현재 프롬프트:', prev.length, '개');
+              console.log('제거할 프롬프트 ID:', data.promptId);
+              
               const remainingPrompts = prev.filter(prompt => {
                 // 프롬프트 ID가 있으면 ID로 필터링, 없으면 상태로 필터링
-                if (prompt._id && data.promptId) {
+                if (data.promptId && prompt._id) {
                   return prompt._id !== data.promptId;
                 } else {
                   return prompt.status !== 'approved' && prompt.status !== 'processed';
                 }
               });
+              
+              console.log('필터링 후 남은 프롬프트:', remainingPrompts.length, '개');
               return remainingPrompts;
             });
             
@@ -547,14 +574,22 @@ const Student = () => {
                   {/* 승인된 이미지 렌더링 */}
                   {approvedImages.length > 0 ? (
                     approvedImages.map((item, idx) => {
-                      // URL 조합: 외부 URL 여부 확인
-                      const url = item.isExternalUrl ?
-                        item.path :
-                        (item.path.startsWith('/uploads') ? item.path : `/uploads/${item.path}`);
-                      const fileName = `image_${item._id||idx}.png`;
-
+                      // URL 조합: 외부 URL 여부 확인 - 더 안전한 방식으로 처리
+                      let url = item.path;
+                      if (!item.isExternalUrl && !url.startsWith('http')) {
+                        // 로컬 경로인 경우 서버 URL 구성
+                        url = url.startsWith('/') ? url : `/${url}`;
+                        
+                        // 기존 로직 유지(호환성)하되 상대 경로 처리 개선
+                        if (!url.startsWith('/uploads') && !url.startsWith('http')) {
+                          url = `/uploads${url}`;
+                        }
+                      }
+                      
+                      const fileName = `image_${item._id || idx}.png`;
+                      
                       return (
-                        <StatusItem key={idx} status="approved">
+                        <StatusItem key={item._id || `img-${idx}`} status="approved">
                           <StatusHeader>
                             <StatusTitle>승인된 이미지</StatusTitle>
                             <StatusDate>{formatDate(item.createdAt)}</StatusDate>
@@ -562,7 +597,7 @@ const Student = () => {
                           <ImagePreview>
                             <ApprovedImage src={url} alt="승인된 이미지"
                               onError={(e) => {
-                                console.error('이미지 로드 실패:', e);
+                                console.error('이미지 로드 실패:', e, 'URL:', url);
                                 e.target.src = 'https://via.placeholder.com/400x300?text=이미지+로드+실패';
                               }}
                             />
