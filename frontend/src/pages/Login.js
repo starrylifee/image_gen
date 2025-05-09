@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import styled from 'styled-components';
 
@@ -79,12 +79,6 @@ const Error = styled.div`
   font-size: 0.9rem;
 `;
 
-const RegisterLink = styled.div`
-  text-align: center;
-  margin-top: 1.5rem;
-  font-size: 0.9rem;
-`;
-
 const Login = () => {
   const [formData, setFormData] = useState({
     username: '',
@@ -159,9 +153,6 @@ const Login = () => {
         <Button type="submit" disabled={loading}>
           {loading ? '로그인 중...' : '로그인'}
         </Button>
-        <RegisterLink>
-          계정이 없으신가요? <Link to="/register">회원가입</Link>
-        </RegisterLink>
       </LoginForm>
     </LoginContainer>
   );
