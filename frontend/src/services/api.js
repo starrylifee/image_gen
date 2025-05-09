@@ -88,6 +88,15 @@ export const teacherAPI = {
     }
   },
 
+  getCredits: async () => {
+    try {
+      const response = await axios.get(`${API_URL}/teacher/credits`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: '크레딧 정보 조회 중 오류가 발생했습니다.' };
+    }
+  },
+
   getPendingImages: async () => {
     try {
       const response = await axios.get(`${API_URL}/teacher/pending-images`);

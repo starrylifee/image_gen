@@ -14,6 +14,13 @@ const Header = styled.header`
   margin-bottom: 2rem;
 `;
 
+const HeaderTop = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+`;
+
 const Title = styled.h1`
   color: #333;
   margin-bottom: 0.5rem;
@@ -22,6 +29,27 @@ const Title = styled.h1`
 const SubTitle = styled.p`
   color: #666;
   font-size: 1.1rem;
+`;
+
+const CreditInfo = styled.div`
+  display: flex;
+  align-items: center;
+  background-color: #f0f7ff;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border-left: 4px solid #0056b3;
+`;
+
+const CreditLabel = styled.span`
+  font-weight: 500;
+  margin-right: 0.5rem;
+  color: #444;
+`;
+
+const CreditValue = styled.span`
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: #0056b3;
 `;
 
 const TabsContainer = styled.div`
@@ -311,6 +339,8 @@ const Teacher = () => {
   const [rejectionReasons, setRejectionReasons] = useState({});
   // 알림 상태 추가
   const [notification, setNotification] = useState({ show: false, message: '', type: 'info' });
+  // 크레딧 상태 추가
+  const [credits, setCredits] = useState(0);
 
   // 학생 계정 생성 관련 상태
   const [newStudents, setNewStudents] = useState([{ studentId: '', studentName: '' }]);
@@ -403,6 +433,28 @@ const Teacher = () => {
     };
   }, []); // 빈 배열: 컴포넌트 마운트 시 한 번만 실행
 
+  // 크레딧 정보를 가져오는 함수
+  const fetchCredits = async () => {
+    try {
+      const response = await teacherAPI.getCredits();
+      if (response.success) {
+        setCredits(response.credits);
+      }
+    } catch (err) {
+      console.error('크레딧 정보 조회 오류:', err);
+      setNotification({
+        show: true,
+        message: '크레딧 정보를 불러오는데 실패했습니다.',
+        type: 'error'
+      });
+    }
+  };
+
+  // 컴포넌트 마운트 시 크레딧 정보 로드
+  useEffect(() => {
+    fetchCredits();
+  }, []);
+
   // 탭 변경 핸들러
   const handleTabChange = (tab) => {
     setActiveTab(tab);
@@ -476,6 +528,7 @@ const Teacher = () => {
       setTimeout(() => setNotification({ show: false, message: '', type: 'info' }), 10000);
     } finally {
       setProcessing(false);
+      fetchCredits(); // 크레딧 정보 갱신
     }
   };
 
@@ -509,24 +562,18 @@ const Teacher = () => {
     } catch (err) {
       console.error('이미지 처리 중 오류 발생:', err);
       
-      // 오류 메시지 처리
-      let errorMessage = '이미지 처리 중 오류가 발생했습니다.';
-      
-      if (err.message) {
-        errorMessage = err.message;
-      }
-      
       // 오류 알림 표시
       setNotification({
         show: true,
-        message: errorMessage,
+        message: err.message || '이미지 처리 중 오류가 발생했습니다.',
         type: 'error'
       });
       
-      // 10초 후 알림 숨기기
-      setTimeout(() => setNotification({ show: false, message: '', type: 'info' }), 10000);
+      // 5초 후 알림 숨기기
+      setTimeout(() => setNotification({ show: false, message: '', type: 'info' }), 5000);
     } finally {
       setProcessing(false);
+      fetchCredits(); // 크레딧 정보 갱신
     }
   };
 
@@ -1155,16 +1202,24 @@ const Teacher = () => {
   return (
     <PageContainer>
       <Header>
-        <Title>교사 대시보드</Title>
-        <SubTitle>학생들의 프롬프트와 생성된 이미지를 검토하세요.</SubTitle>
+        <HeaderTop>
+          <div>
+            <Title>교사 대시보드</Title>
+            <SubTitle>학생들의 프롬프트와 생성된 이미지를 검토하세요.</SubTitle>
+          </div>
+          <CreditInfo>
+            <CreditLabel>보유 크레딧:</CreditLabel>
+            <CreditValue>{credits}</CreditValue>
+          </CreditInfo>
+        </HeaderTop>
+        
+        {/* 알림 메시지 표시 */}
+        {notification.show && (
+          <AlertMessage type={notification.type}>
+            {notification.message}
+          </AlertMessage>
+        )}
       </Header>
-      
-      {/* 알림 메시지 표시 */}
-      {notification.show && (
-        <AlertMessage type={notification.type}>
-          {notification.message}
-        </AlertMessage>
-      )}
       
       <TabsContainer>
         <Tab 
