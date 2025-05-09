@@ -475,7 +475,8 @@ router.post('/teachers/:teacherId/create-students', authenticateAdmin, async (re
           role: 'student',
           teacher: teacherId,
           metadata: {
-            classroom: teacher.metadata?.classroom || ''
+            classroom: teacher.metadata?.classroom || '',
+            teacherId: teacherId
           }
         });
         
