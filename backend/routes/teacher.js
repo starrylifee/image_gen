@@ -471,40 +471,12 @@ router.post('/process-image', authenticateTeacher, async (req, res) => {
       });
     }
     
+    // 상태값 유효성 검사
     if (status !== 'approved' && status !== 'rejected') {
       return res.status(400).json({
         success: false,
         message: '유효한 상태값이 아닙니다. approved 또는 rejected를 사용하세요.'
       });
-    }
-    
-    // 승인 시 교사 크레딧 차감
-    if (status === 'approved') {
-      // 교사 정보 가져오기
-      const teacher = await User.findById(req.user._id);
-      
-      // 크레딧 확인
-      if (teacher.credits < 1) {
-        return res.status(400).json({
-          success: false,
-          message: '크레딧이 부족합니다',
-          credits: teacher.credits,
-          neededCredits: 1
-        });
-      }
-      
-      // 크레딧 차감 및 내역 추가
-      teacher.credits -= 1;
-      teacher.creditHistory.push({
-        amount: -1,
-        reason: `이미지 승인 (이미지 ID: ${imageId})`,
-        timestamp: new Date()
-      });
-      
-      // 교사 정보 저장
-      await teacher.save();
-      
-      console.log(`교사 ${teacher.name}(${teacher.username})의 크레딧이 1 차감되었습니다. 현재 잔액: ${teacher.credits}`);
     }
     
     // 상태 설정
