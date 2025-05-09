@@ -99,6 +99,15 @@ export const teacherAPI = {
     }
   },
 
+  getMyStudents: async () => {
+    try {
+      const response = await axios.get(`${API_URL}/teacher/my-students`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: '학생 목록 조회 중 오류가 발생했습니다.' };
+    }
+  },
+
   getPendingImages: async () => {
     try {
       const response = await axios.get(`${API_URL}/teacher/pending-images`);

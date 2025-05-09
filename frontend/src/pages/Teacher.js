@@ -688,19 +688,16 @@ const Teacher = () => {
     
     try {
       setStudentLoading(true);
-      const response = await fetch('http://localhost:5000/api/teacher/my-students', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
       
-      if (!response.ok) {
-        throw new Error('학생 목록을 불러오는데 실패했습니다');
+      // API 서비스를 사용하여 학생 목록 조회
+      const response = await teacherAPI.getMyStudents();
+      
+      if (response.success) {
+        console.log('학생 목록 로드 성공:', response.students.length, '명');
+        setStudentList(response.students);
+      } else {
+        throw new Error(response.message || '학생 목록을 불러오는데 실패했습니다');
       }
-      
-      const data = await response.json();
-      console.log('학생 목록 로드 성공:', data.students.length, '명');
-      setStudentList(data.students);
     } catch (error) {
       console.error('학생 목록 로드 오류:', error);
       setCreateError(error.message || '학생 목록을 불러오는데 실패했습니다');
@@ -1091,13 +1088,6 @@ const Teacher = () => {
                           >
                             🔑
                           </ActionButton>
-                          <ActionButton 
-                            className="remove"
-                            onClick={() => handleDeleteStudent(student._id)}
-                            title="학생 삭제"
-                          >
-                            🗑️
-                          </ActionButton>
                         </ActionButtonsContainer>
                       </td>
                     </tr>
@@ -1148,49 +1138,10 @@ const Teacher = () => {
               </ModalContent>
             </ModalOverlay>
           )}
-
-          {/* 새 학생 추가 폼 */}
-          <FormContainer>
-            <FormTitle>새 학생 계정</FormTitle>
-            <FormDescription>
-              학생 ID와 이름을 입력하세요. 기본 비밀번호는 'student123'으로 설정됩니다.
-            </FormDescription>
-            
-            {newStudents.map((student, index) => (
-              <StudentRow key={index}>
-                <StudentInput
-                  type="text"
-                  placeholder="학생 ID (예: 1반홍길동)"
-                  value={student.studentId}
-                  onChange={(e) => handleStudentInputChange(index, 'studentId', e.target.value)}
-                />
-                <StudentInput
-                  type="text"
-                  placeholder="학생 이름 (예: 홍길동)"
-                  value={student.studentName}
-                  onChange={(e) => handleStudentInputChange(index, 'studentName', e.target.value)}
-                />
-                <ButtonWrapper>
-                  {index === newStudents.length - 1 ? (
-                    <ActionButton className="add" onClick={addStudentRow}>
-                      +
-                    </ActionButton>
-                  ) : (
-                    <ActionButton className="remove" onClick={() => removeStudentRow(index)}>
-                      -
-                    </ActionButton>
-                  )}
-                </ButtonWrapper>
-              </StudentRow>
-            ))}
-            
-            <SubmitButton 
-              onClick={createStudentAccounts} 
-              disabled={creating}
-            >
-              {creating ? '생성 중...' : '학생 계정 생성'}
-            </SubmitButton>
-          </FormContainer>
+          
+          <InfoMessage>
+            새 학생 계정 추가는 관리자에게 문의하세요.
+          </InfoMessage>
         </div>
       );
     }
@@ -1488,6 +1439,13 @@ const ProcessingBadge = styled.div`
   border-radius: 4px;
   font-size: 12px;
   font-weight: bold;
+`;
+
+const InfoMessage = styled.div`
+  padding: 10px;
+  text-align: center;
+  color: #666;
+  font-style: italic;
 `;
 
 export default Teacher; 
