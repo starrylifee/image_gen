@@ -360,4 +360,203 @@ router.get('/statistics', authenticateAdmin, async (req, res) => {
   }
 });
 
+// 교사 계정 생성 API 추가
+router.post('/create-teacher', authenticateAdmin, async (req, res) => {
+  try {
+    const { username, password, name, classroom, credits } = req.body;
+    
+    // 필수 입력값 검증
+    if (!username || !password || !name) {
+      return res.status(400).json({
+        success: false,
+        message: '아이디, 비밀번호, 이름은 필수 입력 항목입니다'
+      });
+    }
+    
+    // 아이디 중복 확인
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: '이미 사용 중인 아이디입니다'
+      });
+    }
+    
+    // 새 교사 계정 생성
+    const newTeacher = new User({
+      username,
+      password, // 모델에서 저장 전에 해싱됨
+      name,
+      role: 'teacher',
+      credits: credits || 0,
+      metadata: {
+        classroom: classroom || ''
+      }
+    });
+    
+    await newTeacher.save();
+    
+    console.log(`새 교사 계정이 생성되었습니다: ${name}(${username})`);
+    
+    res.status(201).json({
+      success: true,
+      message: '교사 계정이 생성되었습니다',
+      teacher: {
+        _id: newTeacher._id,
+        username: newTeacher.username,
+        name: newTeacher.name,
+        role: newTeacher.role,
+        credits: newTeacher.credits,
+        metadata: newTeacher.metadata
+      }
+    });
+  } catch (error) {
+    console.error('교사 계정 생성 오류:', error);
+    res.status(500).json({
+      success: false,
+      message: '교사 계정 생성 중 오류가 발생했습니다'
+    });
+  }
+});
+
+// 교사에 종속된 학생 계정 생성 API 추가
+router.post('/teachers/:teacherId/create-students', authenticateAdmin, async (req, res) => {
+  try {
+    const { teacherId } = req.params;
+    const { students, defaultPassword } = req.body;
+    
+    // 입력값 검증
+    if (!students || !Array.isArray(students) || students.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: '유효한 학생 정보가 필요합니다'
+      });
+    }
+    
+    // 교사 확인
+    const teacher = await User.findOne({ _id: teacherId, role: 'teacher' });
+    if (!teacher) {
+      return res.status(404).json({
+        success: false,
+        message: '교사를 찾을 수 없습니다'
+      });
+    }
+    
+    // 학생 계정 생성
+    const createdStudents = [];
+    const failedStudents = [];
+    
+    for (const student of students) {
+      try {
+        // 필수 정보 확인
+        if (!student.username || !student.name) {
+          failedStudents.push({
+            ...student,
+            reason: '아이디와 이름은 필수 입력 항목입니다'
+          });
+          continue;
+        }
+        
+        // 아이디 중복 확인
+        const existingUser = await User.findOne({ username: student.username });
+        if (existingUser) {
+          failedStudents.push({
+            ...student,
+            reason: '이미 사용 중인 아이디입니다'
+          });
+          continue;
+        }
+        
+        // 학생 계정 생성
+        const newStudent = new User({
+          username: student.username,
+          password: student.password || defaultPassword || 'student123',
+          name: student.name,
+          role: 'student',
+          teacher: teacherId,
+          metadata: {
+            classroom: teacher.metadata?.classroom || ''
+          }
+        });
+        
+        await newStudent.save();
+        createdStudents.push({
+          _id: newStudent._id,
+          username: newStudent.username,
+          name: newStudent.name
+        });
+      } catch (err) {
+        console.error(`학생 계정 생성 실패 (${student.username}):`, err);
+        failedStudents.push({
+          ...student,
+          reason: '계정 생성 중 오류가 발생했습니다'
+        });
+      }
+    }
+    
+    res.status(201).json({
+      success: true,
+      message: `${createdStudents.length}명의 학생 계정이 생성되었습니다`,
+      createdCount: createdStudents.length,
+      failedCount: failedStudents.length,
+      createdStudents,
+      failedStudents
+    });
+  } catch (error) {
+    console.error('학생 계정 일괄 생성 오류:', error);
+    res.status(500).json({
+      success: false,
+      message: '학생 계정 생성 중 오류가 발생했습니다'
+    });
+  }
+});
+
+// 사용자 비밀번호 변경
+router.patch('/users/:userId/password', authenticateAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { newPassword } = req.body;
+    
+    // 입력값 검증
+    if (!newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: '새 비밀번호를 입력해주세요'
+      });
+    }
+    
+    // 사용자 찾기
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: '사용자를 찾을 수 없습니다'
+      });
+    }
+    
+    // 비밀번호 변경
+    user.password = newPassword;
+    await user.save();
+    
+    console.log(`사용자 ${user.name}(${user.username})의 비밀번호가 변경되었습니다`);
+    
+    res.json({
+      success: true,
+      message: '비밀번호가 성공적으로 변경되었습니다',
+      user: {
+        _id: user._id,
+        username: user.username,
+        name: user.name,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('비밀번호 변경 오류:', error);
+    res.status(500).json({
+      success: false,
+      message: '비밀번호 변경 중 오류가 발생했습니다'
+    });
+  }
+});
+
 module.exports = router; 
