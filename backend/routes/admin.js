@@ -511,6 +511,45 @@ router.post('/teachers/:teacherId/create-students', authenticateAdmin, async (re
   }
 });
 
+// 특정 교사의 학생 목록 조회
+router.get('/teachers/:teacherId/students', authenticateAdmin, async (req, res) => {
+  try {
+    const { teacherId } = req.params;
+    
+    // 교사 확인
+    const teacher = await User.findOne({ _id: teacherId, role: 'teacher' });
+    if (!teacher) {
+      return res.status(404).json({
+        success: false,
+        message: '교사를 찾을 수 없습니다'
+      });
+    }
+    
+    // 해당 교사와 연결된 학생 목록 조회
+    const students = await User.find(
+      { 
+        role: 'student',
+        $or: [
+          { 'metadata.teacherId': teacherId }, 
+          { teacher: teacherId }
+        ]
+      }
+    ).select('_id username name metadata.classroom createdAt lastLogin');
+    
+    res.json({
+      success: true,
+      message: `${students.length}명의 학생이 조회되었습니다`,
+      students
+    });
+  } catch (error) {
+    console.error('학생 목록 조회 오류:', error);
+    res.status(500).json({
+      success: false,
+      message: '학생 목록 조회 중 오류가 발생했습니다'
+    });
+  }
+});
+
 // 사용자 비밀번호 변경
 router.patch('/users/:userId/password', authenticateAdmin, async (req, res) => {
   try {
