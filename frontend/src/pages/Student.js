@@ -210,6 +210,19 @@ const DownloadLink = styled.a`
   svg { margin-right: 6px; }
 `;
 
+// 프롬프트 텍스트 표시를 위한 스타일 컴포넌트
+const PromptTextDisplay = styled.p`
+  margin-top: 0.8rem;
+  padding: 0.5rem;
+  background-color: #f0f0f0; /* 연한 회색 배경 */
+  border-radius: 4px;
+  font-size: 0.9rem;
+  color: #333; /* 어두운 텍스트 색상 */
+  text-align: left; /* 텍스트 왼쪽 정렬 */
+  white-space: pre-wrap; /* 공백 및 줄바꿈 유지 */
+  word-break: break-word; /* 긴 단어 줄바꿈 */
+`;
+
 // 날짜 포맷 함수: 문자열 → 현지 시간 문자열
 const formatDate = (dateString) => {
   if (!dateString) return '날짜 정보 없음';
@@ -422,46 +435,8 @@ const Student = () => {
               return;
             }
             
-            // 이미지가 승인되면 즉시 승인된 이미지 목록에 추가
-            const newImage = {
-              _id: data.imageId,
-              path: data.imageUrl,
-              isExternalUrl: data.isExternalUrl || data.imageUrl.startsWith('http'),
-              promptId: data.promptId, // promptId 추가 (프롬프트 필터링에 필요)
-              createdAt: new Date().toISOString()
-            };
-            
-            console.log('새로운 이미지 객체 생성:', newImage);
-            
-            setApprovedImages(prev => {
-              // 중복 방지: 같은 ID의 이미지가 이미 있는지 확인
-              const exists = prev.some(img => img._id === data.imageId);
-              if (exists) {
-                console.log('이미 승인된 이미지입니다. 중복 추가 방지.');
-                return prev;
-              }
-              return [newImage, ...prev];
-            });
-            
-            // 프롬프트 상태 정리 - 승인된 이미지에 해당되는 프롬프트를 목록에서 제거
-            setPendingPrompts(prev => {
-              if (prev.length === 0) return prev;
-              
-              console.log('프롬프트 필터링 - 현재 프롬프트:', prev.length, '개');
-              console.log('제거할 프롬프트 ID:', data.promptId);
-              
-              const remainingPrompts = prev.filter(prompt => {
-                // 프롬프트 ID가 있으면 ID로 필터링, 없으면 상태로 필터링
-                if (data.promptId && prompt._id) {
-                  return prompt._id !== data.promptId;
-                } else {
-                  return prompt.status !== 'approved' && prompt.status !== 'processed';
-                }
-              });
-              
-              console.log('필터링 후 남은 프롬프트:', remainingPrompts.length, '개');
-              return remainingPrompts;
-            });
+            // 상태를 새로고침하여 승인된 이미지와 프롬프트 정보를 가져옴
+            fetchStatus(); 
             
             setNotification({
               show: true,
@@ -616,6 +591,12 @@ const Student = () => {
                               </svg>
                               다운로드
                             </DownloadLink>
+                            {/* 프롬프트 내용 표시 추가 */}
+                            {item.prompt && item.prompt.content && (
+                              <PromptTextDisplay>
+                                <strong>프롬프트:</strong> {item.prompt.content}
+                              </PromptTextDisplay>
+                            )}
                           </ImagePreview>
                         </StatusItem>
                       );
